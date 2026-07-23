@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataHub - Consultation de Base de Données</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        .section h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .tables-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .table-card {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .table-card:hover {
+            background: #e9ecef;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .table-card h3 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .table-card p {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        .data-table th, .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .data-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .data-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .schema-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .schema-list li {
+            padding: 10px;
+            background: #f8f9fa;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .schema-list li .name {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .schema-list li .type {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            color: #c33;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        
+        .success {
+            background: #efe;
+            border: 1px solid #cfc;
+            color: #3c3;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e9ecef;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            color: #666;
+            transition: all 0.2s;
+        }
+        
+        .tab:hover {
+            color: #667eea;
+        }
+        
+        .tab.active {
+            border-bottom-color: #667eea;
+            color: #667eea;
+            font-weight: 500;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🗄️ DataHub</h1>
+            <p>Interface de consultation de base de données</p>
+        </div>
+        
+        <div class="content">
+            <div class="tabs">
+                <div class="tab active" data-tab="tables">Tables</div>
+                <div class="tab" data-tab="query">Requête</div>
+            </div>
+            
+            <div id="tables-tab" class="tab-content active">
+                <div class="section">
+                    <h2>📋 Liste des Tables</h2>
+                    <button onclick="loadTables()">Charger les tables</button>
+                    <div id="tables-container" class="tables-grid"></div>
+                </div>
+                
+                <div id="table-details" class="section hidden">
+                    <h2 id="selected-table-title">Détails de la table</h2>
+                    
+                    <div class="section">
+                        <h3>Schema</h3>
+                        <ul id="schema-list" class="schema-list"></ul>
+                    </div>
+                    
+                    <div class="section">
+                        <h3>Données</h3>
+                        <div class="form-group">
+                            <label>Limite de résultats:</label>
+                            <input type="number" id="limit-input" value="100" min="1" max="1000">
+                        </div>
+                        <button onclick="loadTableData()">Charger les données</button>
+                        <div id="data-container"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="query-tab" class="tab-content">
+                <div class="section">
+                    <h2>🔍 Requête Personnalisée</h2>
+                    <div class="form-group">
+                        <label>Table:</label>
+                        <select id="query-table-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Filtres (JSON):</label>
+                        <textarea id="query-filters" rows="3" placeholder='{"column1": "value1"}'></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Limite:</label>
+                        <input type="number" id="query-limit" value="100" min="1" max="1000">
+                    </div>
+                    <button onclick="executeQuery()">Exécuter</button>
+                    <div id="query-result"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let selectedTable = null;
+        let allTables = [];
+        
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
+            });
+        });
+        
+        async function loadTables() {
+            const container = document.getElementById('tables-container');
+            container.innerHTML = '<div class="loading">Chargement...</div>';
+            
+            try {
+                const response = await fetch('/api/tables/');
+                const data = await response.json();
+                
+                if (data.tables) {
+                    allTables = data.tables;
+                    container.innerHTML = '';
+                    
+                    data.tables.forEach(table => {
+                        const card = document.createElement('div');
+                        card.className = 'table-card';
+                        card.innerHTML = `
+                            <h3>${table}</h3>
+                            <p>Cliquer pour voir les détails</p>
+                        `;
+                        card.onclick = () => selectTable(table);
+                        container.appendChild(card);
+                    });
+                    
+                    // Update query select
+                    const select = document.getElementById('query-table-select');
+                    select.innerHTML = '';
+                    data.tables.forEach(table => {
+                        const option = document.createElement('option');
+                        option.value = table;
+                        option.textContent = table;
+                        select.appendChild(option);
+                    });
+                } else if (data.error) {
+                    container.innerHTML = `<div class="error">${data.error}</div>`;
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="error">Erreur: ${error.message}</div>`;
+            }
+        }
+        
+        async function selectTable(tableName) {
+            selectedTable = tableName;
+            document.getElementById('table-details').classList.remove('hidden');
+            document.getElementById('selected-table-title').textContent = `Table: ${tableName}`;
+            
+            // Load schema
+            const schemaList = document.getElementById('schema-list');
+            schemaList.innerHTML = '<div class="loading">Chargement du schema...</div>';
+            
+            try {
+                const response = await fetch(`/api/tables/schema/?table_name=${tableName}`);
+                const data = await response.json();
+                
+                if (data.schema) {
+                    schemaList.innerHTML = '';
+                    data.schema.forEach(col => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `
+                            <span class="name">${col.name}</span>
+                            <span class="type">${col.type} ${col.nullable ? '(nullable)' : ''}</span>
+                        `;
+                        schemaList.appendChild(li);
+                    });
+                } else if (data.error) {
+                    schemaList.innerHTML = `<div class="error">${data.error}</div>`;
+                }
+            } catch (error) {
+                schemaList.innerHTML = `<div class="error">Erreur: ${error.message}</div>`;
+            }
+        }
+        
+        async function loadTableData() {
+            const container = document.getElementById('data-container');
+            const limit = document.getElementById('limit-input').value;
+            container.innerHTML = '<div class="loading">Chargement des données...</div>';
+            
+            try {
+                const response = await fetch(`/api/data/select/?table_name=${selectedTable}&limit=${limit}`);
+                const data = await response.json();
+                
+                if (data.data && data.data.length > 0) {
+                    const columns = Object.keys(data.data[0]);
+                    let html = '<table class="data-table"><thead><tr>';
+                    
+                    columns.forEach(col => {
+                        html += `<th>${col}</th>`;
+                    });
+                    html += '</tr></thead><tbody>';
+                    
+                    data.data.forEach(row => {
+                        html += '<tr>';
+                        columns.forEach(col => {
+                            html += `<td>${row[col] !== null ? row[col] : 'NULL'}</td>`;
+                        });
+                        html += '</tr>';
+                    });
+                    
+                    html += '</tbody></table>';
+                    container.innerHTML = html;
+                } else if (data.error) {
+                    container.innerHTML = `<div class="error">${data.error}</div>`;
+                } else {
+                    container.innerHTML = '<p>Aucune donnée trouvée</p>';
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="error">Erreur: ${error.message}</div>`;
+            }
+        }
+        
+        async function executeQuery() {
+            const container = document.getElementById('query-result');
+            const table = document.getElementById('query-table-select').value;
+            const filtersText = document.getElementById('query-filters').value;
+            const limit = document.getElementById('query-limit').value;
+            
+            container.innerHTML = '<div class="loading">Exécution...</div>';
+            
+            let url = `/api/data/select/?table_name=${table}&limit=${limit}`;
+            
+            try {
+                if (filtersText) {
+                    const filters = JSON.parse(filtersText);
+                    Object.keys(filters).forEach(key => {
+                        url += `&${key}=${encodeURIComponent(filters[key])}`;
+                    });
+                }
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.data && data.data.length > 0) {
+                    const columns = Object.keys(data.data[0]);
+                    let html = '<table class="data-table"><thead><tr>';
+                    
+                    columns.forEach(col => {
+                        html += `<th>${col}</th>`;
+                    });
+                    html += '</tr></thead><tbody>';
+                    
+                    data.data.forEach(row => {
+                        html += '<tr>';
+                        columns.forEach(col => {
+                            html += `<td>${row[col] !== null ? row[col] : 'NULL'}</td>`;
+                        });
+                        html += '</tr>';
+                    });
+                    
+                    html += '</tbody></table>';
+                    container.innerHTML = html;
+                } else if (data.error) {
+                    container.innerHTML = `<div class="error">${data.error}</div>`;
+                } else {
+                    container.innerHTML = '<p>Aucun résultat</p>';
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="error">Erreur: ${error.message}</div>`;
+            }
+        }
+        
+        // Load tables on page load
+        loadTables();
+    </script>
+</body>
+</html>

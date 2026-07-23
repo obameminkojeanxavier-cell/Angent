@@ -1,0 +1,21 @@
+[Unit]
+Description=gunicorn daemon for DataHub
+After=network.target
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+RuntimeDirectory=gunicorn
+WorkingDirectory=/path/to/BD AGENT
+ExecStart=/path/to/venv/bin/gunicorn --config gunicorn_config.py datahub.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+PrivateTmp=true
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
