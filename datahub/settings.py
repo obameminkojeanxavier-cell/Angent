@@ -92,6 +92,18 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [],
 }
 
+# Derrière Cloudflare Tunnel + Apache, la requête arrive en HTTP sur l'origine ;
+# le protocole d'origine (https) est transmis via X-Forwarded-Proto. Sans ceci,
+# SECURE_SSL_REDIRECT provoquerait une boucle de redirection infinie.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+
+# CSRF : autoriser explicitement l'origine publique (Django 4+ l'exige pour les
+# requêtes POST non-API via formulaire ; sans effet sur l'API à token).
+CSRF_TRUSTED_ORIGINS = [
+    'https://' + h for h in ALLOWED_HOSTS if h not in ('localhost', '127.0.0.1')
+]
+
 # Security settings for production
 if not DEBUG:
     SECURE_SSL_REDIRECT = True

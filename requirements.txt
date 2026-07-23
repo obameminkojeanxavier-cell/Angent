@@ -1,5 +1,8 @@
-Django==5.0.7
-psycopg2-binary==2.9.9
-djangorestframework==3.15.1
-python-dotenv==1.0.1
-gunicorn==22.0.0
+# Versions compatibles Python 3.13 / PostgreSQL 17.
+# psycopg2-binary >= 2.9.10 fournit des wheels précompilés pour Python 3.13
+# (2.9.9 ne compile pas sur 3.13 : erreur _PyInterpreterState_Get).
+Django>=5.2,<5.3
+psycopg2-binary>=2.9.10
+djangorestframework>=3.16.0
+python-dotenv>=1.0.1
+gunicorn>=23.0.0
