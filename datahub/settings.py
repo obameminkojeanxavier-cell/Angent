@@ -82,7 +82,15 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # API Configuration
+# Token maître (compte "master", tous scopes). Les autres agents ont leurs
+# propres tokens créés via `manage.py create_agent`.
 API_TOKEN = os.getenv('API_TOKEN', '')
+
+# Si True, la lecture des données exige aussi un token (scope data:read).
+# Si False (défaut), la lecture reste publique pour la page de consultation
+# (protégée par Cloudflare Access), et le scope n'est vérifié que si un token
+# est fourni.
+REQUIRE_AUTH_FOR_READ = os.getenv('REQUIRE_AUTH_FOR_READ', 'False') == 'True'
 
 # REST Framework
 REST_FRAMEWORK = {

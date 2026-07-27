@@ -2,6 +2,14 @@
 
 Projet Django permettant la gestion d'une base PostgreSQL via une API REST sécurisée avec authentification par token.
 
+> 📘 **La référence complète des API pour les LLM/agents/skills est dans [API.md](API.md).**
+> Elle décrit chaque endpoint (rôle, méthode, paramètres, auth, scopes, erreurs,
+> exemples ChatGPT/Claude/MCP). Le présent README couvre l'installation et le déploiement.
+
+Fonctionnalités clés : identifiants par agent (ChatGPT, Claude, skills), permissions
+granulaires (scopes), restriction par table, journal d'audit de toutes les
+opérations, déclenchement de skills avec suivi de tâches, API REST **et** serveur MCP.
+
 ## Architecture
 
 - **Backend**: Django 5.0 + Django REST Framework

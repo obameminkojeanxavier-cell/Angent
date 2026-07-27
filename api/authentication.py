@@ -1,55 +1,47 @@
-import secrets
-
-from django.conf import settings
+from django.utils import timezone
 from rest_framework import authentication
 from rest_framework.exceptions import AuthenticationFailed
 
+from .tokens import resolve_client
 
-class APIUser:
+
+class AgentTokenAuthentication(authentication.BaseAuthentication):
     """
-    Principal léger représentant un appelant authentifié par token.
+    Authentification par `Authorization: Bearer <token>`.
 
-    On n'utilise pas d'utilisateur en base : le token API suffit. DRF exige
-    seulement que `request.user.is_authenticated` soit vrai pour que la
-    permission IsAuthenticated laisse passer la requête.
+    Le token est résolu vers un AgentClient (token maître de .env, ou client
+    enregistré en base). En cas de succès, request.user = le client (avec ses
+    scopes et tables autorisées).
     """
-
-    is_authenticated = True
-    is_active = True
-    is_anonymous = False
-
-    def __str__(self):
-        return 'api-token'
-
-
-class TokenAuthentication(authentication.BaseAuthentication):
-    """Authentification par header `Authorization: Bearer <API_TOKEN>`."""
 
     keyword = 'Bearer'
 
     def authenticate(self, request):
-        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        header = request.META.get('HTTP_AUTHORIZATION', '')
 
-        # Pas de header Bearer -> pas de credentials fournis.
-        # On renvoie None : la classe de permission décidera (401 si protégé,
-        # accès autorisé si l'endpoint est public).
-        if not auth_header.startswith(self.keyword + ' '):
+        # Pas de header Bearer -> pas de credentials : la permission décidera
+        # (les lectures peuvent rester publiques selon REQUIRE_AUTH_FOR_READ).
+        if not header.startswith(self.keyword + ' '):
             return None
 
-        token = auth_header[len(self.keyword) + 1:].strip()
+        raw = header[len(self.keyword) + 1:].strip()
+        if not raw:
+            raise AuthenticationFailed('Empty token')
 
-        expected = settings.API_TOKEN
-        # Refus si le serveur n'a pas de token configuré : sinon un Bearer vide
-        # comparé à une chaîne vide passerait ('' == '').
-        if not expected:
-            raise AuthenticationFailed('API token not configured on server')
+        client = resolve_client(raw)
+        if client is None:
+            raise AuthenticationFailed('Invalid or inactive token')
 
-        # Comparaison en temps constant pour éviter les attaques temporelles.
-        if not token or not secrets.compare_digest(token, expected):
-            raise AuthenticationFailed('Invalid API token')
+        # Trace de dernière utilisation (uniquement pour les clients en base).
+        if getattr(client, 'pk', None):
+            try:
+                type(client).objects.filter(pk=client.pk).update(
+                    last_used_at=timezone.now()
+                )
+            except Exception:
+                pass
 
-        return (APIUser(), token)
+        return (client, raw)
 
     def authenticate_header(self, request):
-        # Fait renvoyer 401 (et pas 403) sur échec/absence d'authentification.
         return self.keyword

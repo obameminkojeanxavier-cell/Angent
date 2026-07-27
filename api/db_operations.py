@@ -240,5 +240,57 @@ class DatabaseOperations:
                     'type': row[1],
                     'nullable': row[2] == 'YES'
                 })
-            
+
             return columns
+
+    @staticmethod
+    def count(table_name):
+        """Nombre de lignes d'une table."""
+        validate_identifier(table_name)
+        with connection.cursor() as cursor:
+            cursor.execute(f'SELECT COUNT(*) FROM "{table_name}"')
+            return cursor.fetchone()[0]
+
+    @staticmethod
+    def search(table_name, q, columns=None, limit=None):
+        """
+        Recherche insensible à la casse (ILIKE) de la sous-chaîne `q`.
+
+        Si `columns` n'est pas fourni, recherche sur toutes les colonnes texte.
+        Les identifiants sont validés ; la valeur recherchée est paramétrée.
+        """
+        validate_identifier(table_name)
+
+        if not columns:
+            schema = DatabaseOperations.get_table_schema(table_name)
+            columns = [
+                c['name'] for c in schema
+                if 'char' in c['type'] or c['type'] in ('text',)
+            ]
+
+        conditions = []
+        params = []
+        for col_name in columns:
+            validate_identifier(col_name)
+            conditions.append(f'"{col_name}"::text ILIKE %s')
+            params.append(f'%{q}%')
+
+        query = f'SELECT * FROM "{table_name}"'
+        if conditions:
+            query += ' WHERE ' + ' OR '.join(conditions)
+
+        if limit in (None, ''):
+            limit = DEFAULT_SELECT_LIMIT
+        else:
+            try:
+                limit = int(limit)
+            except (ValueError, TypeError):
+                raise ValidationError("'limit' must be an integer")
+        limit = max(1, min(limit, MAX_SELECT_LIMIT))
+        query += ' LIMIT %s'
+        params.append(limit)
+
+        with connection.cursor() as cursor:
+            cursor.execute(query, params)
+            cols = [desc[0] for desc in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
