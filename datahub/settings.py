@@ -92,6 +92,12 @@ API_TOKEN = os.getenv('API_TOKEN', '')
 # est fourni.
 REQUIRE_AUTH_FOR_READ = os.getenv('REQUIRE_AUTH_FOR_READ', 'False') == 'True'
 
+# Autorise la console web (interface GOD HAND) à exécuter des documents sans
+# token, en tant que compte master. En local (DEBUG) : activé par défaut.
+# En production : désactivé par défaut (protéger le site par Cloudflare Access,
+# puis mettre ALLOW_WEB_CONSOLE=True, ou fournir un token skills:trigger).
+ALLOW_WEB_CONSOLE = os.getenv('ALLOW_WEB_CONSOLE', 'True' if DEBUG else 'False') == 'True'
+
 # REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
