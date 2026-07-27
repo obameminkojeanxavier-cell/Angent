@@ -95,7 +95,7 @@ TOOLS = [
     },
     {
         "name": "insert",
-        "description": "Insérer une ligne. data = {colonne: valeur}. Renvoie l'id.",
+        "description": "Insérer une ligne. data = {colonne: valeur}. Renvoie l'enregistrement complet.",
         "inputSchema": {
             "type": "object",
             "properties": {"table_name": {"type": "string"}, "data": {"type": "object"}},
@@ -145,6 +145,91 @@ TOOLS = [
             "required": ["task_id"], "additionalProperties": False,
         },
     },
+    # Outils métier spécifiques pour ChatGPT
+    {
+        "name": "create_document",
+        "description": "Créer un document dans la table 'documents'. Champs: titre (requis), contenu, auteur, statut.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "titre": {"type": "string"},
+                "contenu": {"type": "string"},
+                "auteur": {"type": "string"},
+                "statut": {"type": "string"},
+            },
+            "required": ["titre"], "additionalProperties": False,
+        },
+    },
+    {
+        "name": "create_product",
+        "description": "Créer un produit dans la table 'produits'. Champs: nom (requis), prix, description, statut.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "nom": {"type": "string"},
+                "prix": {"type": "number"},
+                "description": {"type": "string"},
+                "statut": {"type": "string"},
+            },
+            "required": ["nom"], "additionalProperties": False,
+        },
+    },
+    {
+        "name": "create_project",
+        "description": "Créer un projet dans la table 'projets'. Champs: nom (requis), description, statut, date_debut.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "nom": {"type": "string"},
+                "description": {"type": "string"},
+                "statut": {"type": "string"},
+                "date_debut": {"type": "string"},
+            },
+            "required": ["nom"], "additionalProperties": False,
+        },
+    },
+    {
+        "name": "create_task",
+        "description": "Créer une tâche dans la table 'taches'. Champs: titre (requis), description, statut, priorite, projet_id.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "titre": {"type": "string"},
+                "description": {"type": "string"},
+                "statut": {"type": "string"},
+                "priorite": {"type": "string"},
+                "projet_id": {"type": "integer"},
+            },
+            "required": ["titre"], "additionalProperties": False,
+        },
+    },
+    {
+        "name": "update_product",
+        "description": "Mettre à jour un produit dans la table 'produits'. id (requis), nom, prix, description, statut.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer"},
+                "nom": {"type": "string"},
+                "prix": {"type": "number"},
+                "description": {"type": "string"},
+                "statut": {"type": "string"},
+            },
+            "required": ["id"], "additionalProperties": False,
+        },
+    },
+    {
+        "name": "search_documents",
+        "description": "Rechercher des documents dans la table 'documents'. q (requis), limit (option).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "q": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+            },
+            "required": ["q"], "additionalProperties": False,
+        },
+    },
 ]
 
 TOOLS_BY_NAME = {t["name"]: t for t in TOOLS}
@@ -155,6 +240,10 @@ TOOL_SCOPES = {
     'create_table': SCOPE_TABLES, 'add_column': SCOPE_TABLES,
     'insert': SCOPE_DATA_WRITE, 'update': SCOPE_DATA_WRITE, 'delete': SCOPE_DATA_WRITE,
     'list_skills': SCOPE_SKILLS, 'run_skill': SCOPE_SKILLS, 'get_task': SCOPE_SKILLS,
+    # Outils métier - tous nécessitent data:write sauf search_documents (data:read)
+    'create_document': SCOPE_DATA_WRITE, 'create_product': SCOPE_DATA_WRITE,
+    'create_project': SCOPE_DATA_WRITE, 'create_task': SCOPE_DATA_WRITE,
+    'update_product': SCOPE_DATA_WRITE, 'search_documents': SCOPE_DATA_READ,
 }
 
 
@@ -185,17 +274,105 @@ def _run_tool(name, args, client):
         DatabaseOperations.add_column(args["table_name"], args["column_name"], args["column_type"])
         return {"message": f"Column {args['column_name']} added"}
     if name == "insert":
-        return {"id": DatabaseOperations.insert(args["table_name"], args["data"])}
+        record = DatabaseOperations.insert(args["table_name"], args["data"])
+        return {
+            "success": True,
+            "operation": "insert",
+            "table": args["table_name"],
+            "id": record.get("id"),
+            "data": record
+        }
     if name == "update":
-        return {"updated": DatabaseOperations.update(args["table_name"], args["data"], args["filters"])}
+        updated = DatabaseOperations.update(args["table_name"], args["data"], args["filters"])
+        return {
+            "success": True,
+            "operation": "update",
+            "table": args["table_name"],
+            "updated_count": updated
+        }
     if name == "delete":
-        return {"deleted": DatabaseOperations.delete(args["table_name"], args["filters"])}
+        deleted = DatabaseOperations.delete(args["table_name"], args["filters"])
+        return {
+            "success": True,
+            "operation": "delete",
+            "table": args["table_name"],
+            "deleted_count": deleted
+        }
     if name == "list_skills":
         return {"skills": skills_registry.list_skills()}
     if name == "run_skill":
         return _run_skill(args, client)
     if name == "get_task":
         return _get_task(args, client)
+
+    # Outils métier spécifiques
+    if name == "create_document":
+        table = "documents"
+        if not client.can_access_table(table):
+            raise PermissionError(f'Table non autorisée: {table}')
+        record = DatabaseOperations.insert(table, args)
+        return {
+            "success": True,
+            "operation": "insert",
+            "table": table,
+            "id": record.get("id"),
+            "data": record
+        }
+    if name == "create_product":
+        table = "produits"
+        if not client.can_access_table(table):
+            raise PermissionError(f'Table non autorisée: {table}')
+        record = DatabaseOperations.insert(table, args)
+        return {
+            "success": True,
+            "operation": "insert",
+            "table": table,
+            "id": record.get("id"),
+            "data": record
+        }
+    if name == "create_project":
+        table = "projets"
+        if not client.can_access_table(table):
+            raise PermissionError(f'Table non autorisée: {table}')
+        record = DatabaseOperations.insert(table, args)
+        return {
+            "success": True,
+            "operation": "insert",
+            "table": table,
+            "id": record.get("id"),
+            "data": record
+        }
+    if name == "create_task":
+        table = "taches"
+        if not client.can_access_table(table):
+            raise PermissionError(f'Table non autorisée: {table}')
+        record = DatabaseOperations.insert(table, args)
+        return {
+            "success": True,
+            "operation": "insert",
+            "table": table,
+            "id": record.get("id"),
+            "data": record
+        }
+    if name == "update_product":
+        table = "produits"
+        if not client.can_access_table(table):
+            raise PermissionError(f'Table non autorisée: {table}')
+        product_id = args.pop("id")
+        updated = DatabaseOperations.update(table, args, {"id": product_id})
+        return {
+            "success": True,
+            "operation": "update",
+            "table": table,
+            "updated_count": updated
+        }
+    if name == "search_documents":
+        table = "documents"
+        if not client.can_access_table(table):
+            raise PermissionError(f'Table non autorisée: {table}')
+        rows = DatabaseOperations.search(table, args.get("q", ""), None, args.get("limit"))
+        return {"count": len(rows), "data": rows}
+
     raise KeyError(name)
 
 
@@ -238,8 +415,14 @@ def _result(req_id, result):
     return {"jsonrpc": "2.0", "id": req_id, "result": result}
 
 
-def _error(req_id, code, message):
-    return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
+def _error(req_id, code, message, error_code=None, field=None):
+    """Format d'erreur structuré pour ChatGPT."""
+    error_obj = {"code": code, "message": message}
+    if error_code:
+        error_obj["error_code"] = error_code
+    if field:
+        error_obj["field"] = field
+    return {"jsonrpc": "2.0", "id": req_id, "error": error_obj}
 
 
 def _handle_message(msg, client, request):
@@ -267,21 +450,50 @@ def _handle_message(msg, client, request):
         name = params.get("name")
         args = params.get("arguments") or {}
         if name not in TOOLS_BY_NAME:
-            return _error(req_id, -32602, f"Unknown tool: {name}")
+            return _error(req_id, -32602, f"Unknown tool: {name}", "UNKNOWN_TOOL")
         # Vérification du scope
         if not client.has_scope(TOOL_SCOPES.get(name)):
             audit(request, f'mcp.{name}', args.get('table_name', ''), 'denied')
             return _result(req_id, {
-                "content": [{"type": "text", "text": f"Permission refusée : scope {TOOL_SCOPES.get(name)} requis"}],
+                "success": False,
+                "error": {
+                    "code": "PERMISSION_DENIED",
+                    "message": f"Scope {TOOL_SCOPES.get(name)} requis",
+                    "scope_required": TOOL_SCOPES.get(name)
+                },
                 "isError": True,
             })
         try:
             value = _run_tool(name, args, client)
             audit(request, f'mcp.{name}', args.get('table_name', args.get('name', '')))
+        except ValueError as e:
+            audit(request, f'mcp.{name}', args.get('table_name', ''), 'error', {'error': str(e)})
+            return _result(req_id, {
+                "success": False,
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": str(e)
+                },
+                "isError": True,
+            })
+        except PermissionError as e:
+            audit(request, f'mcp.{name}', args.get('table_name', ''), 'denied', {'error': str(e)})
+            return _result(req_id, {
+                "success": False,
+                "error": {
+                    "code": "PERMISSION_DENIED",
+                    "message": str(e)
+                },
+                "isError": True,
+            })
         except Exception as e:
             audit(request, f'mcp.{name}', args.get('table_name', ''), 'error', {'error': str(e)})
             return _result(req_id, {
-                "content": [{"type": "text", "text": f"Error: {e}"}],
+                "success": False,
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": str(e)
+                },
                 "isError": True,
             })
         return _result(req_id, {

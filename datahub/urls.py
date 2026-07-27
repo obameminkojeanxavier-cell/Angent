@@ -5,6 +5,7 @@ from django.views.generic import TemplateView
 from api.mcp import mcp_view
 from api.docs import skill_doc, api_doc
 from api.console import console_run, console_skills
+from api.openapi import openapi_schema
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -12,6 +13,8 @@ urlpatterns = [
     # Documents téléchargeables (contrat d'intégration pour les IA/skills)
     path('api.md', api_doc, name='api-doc'),
     path('skill.md', skill_doc, name='skill-doc'),
+    # Schéma OpenAPI pour les "Actions" d'un GPT personnalisé (ChatGPT)
+    path('openapi.json', openapi_schema, name='openapi'),
     # Console d'exécution (interface GOD HAND)
     path('console/skills', console_skills, name='console-skills'),
     path('console/run', console_run, name='console-run'),

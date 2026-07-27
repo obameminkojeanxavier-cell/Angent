@@ -31,6 +31,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'api.rate_limit.RateLimitMiddleware',
 ]
 
 ROOT_URLCONF = 'datahub.urls'
@@ -98,6 +99,10 @@ REQUIRE_AUTH_FOR_READ = os.getenv('REQUIRE_AUTH_FOR_READ', 'False') == 'True'
 # puis mettre ALLOW_WEB_CONSOLE=True, ou fournir un token skills:trigger).
 ALLOW_WEB_CONSOLE = os.getenv('ALLOW_WEB_CONSOLE', 'True' if DEBUG else 'False') == 'True'
 
+# URL de base annoncée dans le schéma OpenAPI (/openapi.json) pour les GPT
+# Actions. Vide = déduite de la requête (scheme + host).
+OPENAPI_BASE_URL = os.getenv('OPENAPI_BASE_URL', '')
+
 # REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
@@ -126,3 +131,7 @@ if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
+
+# Rate limiting configuration
+RATE_LIMIT_PER_MINUTE = int(os.getenv('RATE_LIMIT_PER_MINUTE', '60'))
+RATE_LIMIT_PER_HOUR = int(os.getenv('RATE_LIMIT_PER_HOUR', '1000'))

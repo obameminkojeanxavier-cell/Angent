@@ -186,9 +186,13 @@ class InsertView(ScopedView):
             return Response({'error': 'data dict is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
             _check_table(request, table_name)
-            row_id = DatabaseOperations.insert(table_name, data)
+            record = DatabaseOperations.insert(table_name, data)
+            row_id = record.get('id') if isinstance(record, dict) else record
             audit(request, 'insert', table_name, detail={'id': row_id})
-            return Response({'message': 'Data inserted successfully', 'id': row_id}, status=status.HTTP_201_CREATED)
+            return Response(
+                {'message': 'Data inserted successfully', 'id': row_id, 'record': record},
+                status=status.HTTP_201_CREATED,
+            )
         except ValidationError as e:
             audit(request, 'insert', table_name, 'error', {'error': str(e)})
             return _bad(e)

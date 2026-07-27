@@ -69,34 +69,39 @@ class DatabaseOperations:
     @staticmethod
     def insert(table_name, data):
         """
-        Insert data into a table.
-        
+        Insert data into a table and return the complete record.
+
         Args:
             table_name: Validated table name
             data: Dict of {column_name: value}
+
+        Returns:
+            Dict with the complete inserted record including id and created_at
         """
         validate_identifier(table_name)
-        
+
         if not data:
             raise ValueError("At least one column/value pair is required")
-        
+
         columns = []
         values = []
         placeholders = []
-        
+
         for col_name, value in data.items():
             validate_identifier(col_name)
             columns.append(f'"{col_name}"')
             values.append(value)
             placeholders.append('%s')
-        
+
         with connection.cursor() as cursor:
             cursor.execute(f"""
                 INSERT INTO "{table_name}" ({', '.join(columns)})
                 VALUES ({', '.join(placeholders)})
-                RETURNING id;
+                RETURNING *;
             """, values)
-            return cursor.fetchone()[0]
+            columns = [desc[0] for desc in cursor.description]
+            row = cursor.fetchone()
+            return dict(zip(columns, row))
     
     @staticmethod
     def select(table_name, filters=None, limit=None):

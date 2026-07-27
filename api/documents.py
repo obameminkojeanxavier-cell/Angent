@@ -72,12 +72,13 @@ def _ingest(doc, client, tracer):
     else:
         tracer.db("Table 'documents' déjà présente")
 
-    row_id = DatabaseOperations.insert('documents', {
+    record = DatabaseOperations.insert('documents', {
         'filename': doc['filename'],
         'taille': doc['size'],
         'apercu': doc['preview'],
         'contenu': doc['text'],
     })
+    row_id = record.get('id') if isinstance(record, dict) else record
     tracer.db(f"Ligne insérée dans 'documents' (id={row_id})", {'id': row_id})
     tracer.info("Traitement terminé avec succès")
     return {'table': 'documents', 'id': row_id, 'inserted': True}

@@ -273,7 +273,188 @@ l'en-tête `Authorization: Bearer <TOKEN>`. Claude découvre les outils via
 
 ---
 
-## 7. Ajouter un nouveau skill (côté serveur)
+## 7. Intégration ChatGPT avec DataHub
+
+### 7.1 Objectif
+
+Permettre à ChatGPT de créer, lire, rechercher, modifier et supprimer des données dans la base de données DataHub depuis une conversation.
+
+ChatGPT ne doit jamais accéder directement à PostgreSQL. Toutes les opérations doivent obligatoirement passer par le serveur MCP ou les API REST sécurisées de DataHub.
+
+### 7.2 Configuration du serveur MCP
+
+Le serveur MCP est publiquement accessible à l'adresse suivante :
+
+```
+https://agent.co-ned.com/mcp
+```
+
+Il accepte des requêtes HTTP POST au format JSON-RPC 2.0.
+
+### 7.3 Création de l'agent ChatGPT
+
+Créer un agent réservé à ChatGPT avec un token distinct :
+
+```bash
+python manage.py create_agent \
+  --name chatgpt-agent \
+  --scopes data:read,data:write,skills:trigger \
+  --tables documents,produits,projets,taches
+```
+
+Le token généré doit être :
+- **Jamais** enregistré dans le code frontend
+- **Jamais** stocké dans le fichier API.md
+- **Jamais** dans GitHub ou une page HTML publique
+- Conservé dans les secrets du serveur ou la configuration sécurisée du connecteur MCP
+
+### 7.4 Outils MCP disponibles
+
+Le serveur MCP expose les outils suivants :
+
+#### Outils génériques
+- `list_tables` - Lister toutes les tables
+- `get_table_schema` - Schéma d'une table
+- `select` - Lire des lignes
+- `search` - Recherche texte (ILIKE)
+- `create_table` - Créer une table
+- `add_column` - Ajouter une colonne
+- `insert` - Insérer une ligne (retourne l'enregistrement complet)
+- `update` - Mettre à jour
+- `delete` - Supprimer
+- `list_skills` - Lister les skills
+- `run_skill` - Déclencher un skill
+- `get_task` - État d'une tâche
+
+#### Outils métier spécifiques
+- `create_document` - Créer un document (table `documents`)
+- `create_product` - Créer un produit (table `produits`)
+- `create_project` - Créer un projet (table `projets`)
+- `create_task` - Créer une tâche (table `taches`)
+- `update_product` - Mettre à jour un produit
+- `search_documents` - Rechercher des documents
+
+### 7.5 Format des réponses
+
+Après une création, l'outil retourne l'enregistrement complet :
+
+```json
+{
+  "success": true,
+  "operation": "insert",
+  "table": "produits",
+  "id": 25,
+  "data": {
+    "id": 25,
+    "nom": "Ordinateur HP",
+    "prix": 350000,
+    "statut": "actif",
+    "created_at": "2026-07-27T11:45:00+01:00"
+  }
+}
+```
+
+### 7.6 Format des erreurs
+
+Les erreurs sont structurées :
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Le champ nom est obligatoire.",
+    "field": "nom"
+  }
+}
+```
+
+Codes d'erreur possibles :
+- `UNAUTHORIZED` - Token absent ou invalide
+- `PERMISSION_DENIED` - Scope insuffisant ou table interdite
+- `VALIDATION_ERROR` - Champ obligatoire absent ou type invalide
+- `UNKNOWN_TOOL` - Outil MCP inconnu
+- `RATE_LIMIT_EXCEEDED` - Trop de requêtes
+- `INTERNAL_ERROR` - Erreur serveur
+
+### 7.7 Sécurité
+
+Règles appliquées :
+- Aucun accès direct à PostgreSQL depuis ChatGPT
+- Aucun SQL brut accepté
+- Requêtes SQL toujours paramétrées
+- Filtres obligatoires pour les mises à jour
+- Filtres obligatoires pour les suppressions
+- Limitation du nombre de lignes retournées (max 1000)
+- Limitation du nombre de requêtes par minute (60 par défaut)
+- Audit de toutes les opérations
+
+### 7.8 Rate Limiting
+
+Le serveur applique une limitation de débit :
+- **Par défaut** : 60 requêtes/minute, 1000/heure
+- **Configurable** via les variables d'environnement `RATE_LIMIT_PER_MINUTE` et `RATE_LIMIT_PER_HOUR`
+- **Par IP et par client** : combiné pour un suivi précis
+- **Réponse** : HTTP 429 avec erreur structurée
+
+### 7.9 Audit
+
+Chaque action enregistre :
+- Le nom de l'agent
+- L'outil appelé
+- La table concernée
+- L'identifiant de l'enregistrement
+- Le statut
+- L'adresse IP
+- La date et l'heure
+- Le code d'erreur (en cas d'échec)
+
+### 7.10 Cloudflare Access
+
+Si Cloudflare Access protège le serveur, créer un Service Token dédié au connecteur MCP.
+
+Le connecteur doit pouvoir transmettre :
+- `Authorization: Bearer TOKEN_DATAHUB`
+- `CF-Access-Client-Id`
+- `CF-Access-Client-Secret`
+
+L'endpoint MCP ne doit jamais retourner une page HTML de connexion Cloudflare. Il doit toujours retourner une réponse JSON-RPC exploitable.
+
+### 7.11 Exemple de flux de conversation
+
+Une fois connecté, l'utilisateur peut écrire :
+
+**Utilisateur** : "Crée un produit nommé Ordinateur HP au prix de 350 000."
+
+**ChatGPT** :
+1. Identifie l'outil `create_product`
+2. Envoie les données au serveur MCP
+3. Le serveur enregistre dans PostgreSQL
+4. Reçoit la réponse de l'API
+5. Affiche dans la conversation :
+   ```
+   Produit créé avec succès.
+   Identifiant : 25
+   Nom : Ordinateur HP
+   Prix : 350000
+   Table : produits
+   Statut de l'opération : success
+   ```
+
+### 7.12 Intégration avec d'autres LLM (Claude, etc.)
+
+Pour connecter d'autres LLM via MCP :
+
+1. Configurer le client MCP avec l'URL `https://agent.co-ned.com/mcp`
+2. Ajouter l'en-tête `Authorization: Bearer <TOKEN>`
+3. Le client découvrira automatiquement les outils disponibles
+4. Utiliser les mêmes outils que pour ChatGPT
+
+Pour l'intégration via API REST classique, voir les exemples dans la section 6.
+
+---
+
+## 8. Ajouter un nouveau skill (côté serveur)
 
 Dans `api/skills.py` :
 ```python
@@ -284,3 +465,46 @@ def _mon_skill(params, client):
 ```
 Il devient immédiatement disponible via `/api/skills/mon.skill/run/` et l'outil
 MCP `run_skill`.
+
+---
+
+## 9. Connecter ChatGPT via une « Action » (GPT personnalisé)
+
+ChatGPT peut appeler cette API **tout seul** dans une conversation, sans copier-coller,
+en tant qu'« Action » d'un **GPT personnalisé**. Un schéma OpenAPI est fourni :
+
+```
+GET https://agent.co-ned.com/openapi.json
+```
+
+### Étapes (côté ChatGPT — compte Plus/Team)
+1. ChatGPT → **Explorer les GPT** → **+ Créer** → onglet **Configurer**.
+2. Section **Actions** → **Créer une nouvelle action**.
+3. **Schéma** : coller l'URL `https://agent.co-ned.com/openapi.json`
+   (ou coller le contenu JSON renvoyé par cette URL).
+4. **Authentification** → type **Clé API** :
+   - Type d'authentification : **API Key**
+   - **Auth Type** : *Bearer*
+   - **Clé API** : le token de l'agent ChatGPT (voir ci-dessous).
+5. Enregistrer. ChatGPT liste alors les opérations (`insertData`, `selectData`,
+   `searchData`, `createTable`, `updateData`, `deleteData`, `runSkill`, …).
+
+### Token dédié à ChatGPT (côté serveur)
+```bash
+python manage.py create_agent \
+  --name chatgpt \
+  --scopes data:read,data:write,skills:trigger \
+  --tables ""          # ou "produits,documents,projets" pour restreindre
+```
+Copier le token affiché (une seule fois) et le mettre dans le champ **Clé API**
+de l'Action. Ne jamais l'écrire dans le schéma ni dans une instruction publique.
+
+### Exemple d'usage dans la conversation
+> « Crée dans la table `produits` un produit nommé *Ordinateur HP* à 350000. »
+
+ChatGPT appellera `insertData` avec
+`{"table_name":"produits","data":{"nom":"Ordinateur HP","prix":350000}}`
+et affichera l'enregistrement créé (id inclus).
+
+> Prérequis : la table doit exister (sinon demander à ChatGPT d'appeler
+> `createTable` d'abord, ce qui exige le scope `tables:manage`).
