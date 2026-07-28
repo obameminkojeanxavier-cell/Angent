@@ -7,6 +7,7 @@ from api.docs import skill_doc, api_doc
 from api.console import console_run, console_skills
 from api.openapi import openapi_schema
 from api.artifacts import render_artifact
+from api import manage as mng
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -19,6 +20,16 @@ urlpatterns = [
     # Rendu public des artefacts (fichiers produits par les agents)
     path('a/<str:slug>', render_artifact, name='artifact-render'),
     path('a/<str:slug>/', render_artifact),
+
+    # Tableau de bord d'administration (GOD HAND) — réservé au staff connecté
+    path('manage/', mng.dashboard, name='dashboard'),
+    path('manage/api/overview', mng.overview),
+    path('manage/api/agents/create', mng.agent_create),
+    path('manage/api/agents/<int:agent_id>/update', mng.agent_update),
+    path('manage/api/agents/<int:agent_id>/delete', mng.agent_delete),
+    path('manage/api/skills', mng.skills_list),
+    path('manage/api/skills/create', mng.skill_create),
+    path('manage/api/skills/<str:name>/delete', mng.skill_delete),
     # Console d'exécution (interface GOD HAND)
     path('console/skills', console_skills, name='console-skills'),
     path('console/run', console_run, name='console-run'),

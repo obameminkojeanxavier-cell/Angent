@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GOD HAND — Administration</title>
+<style>
+:root{
+  --bg:#08080b;--panel:#121219;--panel2:#0e0e13;--border:#23232e;--text:#e7e7ee;
+  --muted:#8a8a99;--accent:#ff2d4a;--accent2:#ff6a3d;--ok:#35d07f;--err:#ff4d5e;--db:#6aa0ff;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:
+ radial-gradient(1000px 500px at 50% -10%,rgba(255,45,74,.10),transparent 60%),var(--bg);
+ color:var(--text);min-height:100vh;padding:22px 18px 60px}
+a{color:var(--accent2);text-decoration:none}
+.header{text-align:center;margin-bottom:8px}
+.header h1{font-size:clamp(24px,4vw,38px);letter-spacing:6px;font-weight:800;
+ background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.header p{color:var(--muted);letter-spacing:2px;font-size:12px;text-transform:uppercase}
+.wrap{max-width:1100px;margin:0 auto}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin:14px 0}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}
+.tab{padding:10px 18px;border:1px solid var(--border);border-radius:10px;background:var(--panel);
+ cursor:pointer;color:var(--muted);font-weight:600}
+.tab.active{color:#fff;border-color:var(--accent);box-shadow:0 6px 20px rgba(255,45,74,.25)}
+.small{font-size:12px;color:var(--muted)}
+.view{display:none}.view.active{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:14px}
+.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--border);
+ border-radius:14px;padding:16px}
+.card h3{font-size:14px;margin-bottom:6px}
+.stat{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px}
+.stat .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 18px;min-width:120px}
+.stat .box b{font-size:26px;display:block;background:linear-gradient(90deg,var(--accent),var(--accent2));
+ -webkit-background-clip:text;background-clip:text;color:transparent}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border);font-size:14px}
+th{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:1px}
+.agent{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-top:14px}
+.agent .row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.agent .name{font-size:17px;font-weight:700}
+.scopes{display:flex;gap:14px;flex-wrap:wrap;margin:12px 0}
+.scopes label{display:flex;align-items:center;gap:6px;font-size:13px;background:#05050a;border:1px solid var(--border);
+ padding:7px 11px;border-radius:8px;cursor:pointer}
+input[type=text],textarea,input[type=number]{width:100%;background:#05050a;color:var(--text);
+ border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:13px;font-family:inherit}
+textarea{min-height:90px;resize:vertical}
+.btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:9px;
+ padding:9px 16px;font-weight:700;cursor:pointer;font-size:13px}
+.btn:hover{transform:translateY(-1px)}
+.btn.ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}
+.btn.danger{background:transparent;border:1px solid rgba(255,77,94,.5);color:var(--err)}
+.badge{padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.badge.on{background:rgba(53,208,127,.15);color:var(--ok)}
+.badge.off{background:rgba(255,77,94,.15);color:var(--err)}
+.field{margin:10px 0}.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel);
+ border:1px solid var(--accent);border-radius:10px;padding:12px 18px;display:none;z-index:50;max-width:90%}
+.tokenbox{background:#05050a;border:1px dashed var(--accent2);border-radius:8px;padding:10px;margin-top:8px;
+ font-family:'Consolas',monospace;font-size:13px;word-break:break-all;color:var(--accent2)}
+.filerow{display:grid;grid-template-columns:1fr 2fr auto;gap:8px;margin-bottom:8px}
+h2.sec{margin:18px 0 6px;font-size:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header"><h1>GOD&nbsp;HAND</h1><p>Administration de la plateforme</p></div>
+  <div class="topbar">
+    <div class="tabs">
+      <div class="tab active" data-v="overview">Vue d'ensemble</div>
+      <div class="tab" data-v="agents">Agents &amp; Droits</div>
+      <div class="tab" data-v="skills">Skills</div>
+    </div>
+    <div class="small"><a href="/">← Console</a> &nbsp;·&nbsp; <a href="/admin/logout/">Déconnexion</a></div>
+  </div>
+
+  <!-- VUE D'ENSEMBLE -->
+  <div class="view active" id="v-overview">
+    <div class="stat" id="stats"></div>
+    <div class="grid">
+      <div class="card"><h3>🗄️ Tables de la base</h3><table id="tbl-tables"><tbody></tbody></table></div>
+      <div class="card"><h3>🧩 Skills</h3><table id="tbl-skills"><tbody></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- AGENTS -->
+  <div class="view" id="v-agents">
+    <h2 class="sec">Créer un agent</h2>
+    <div class="agent">
+      <div class="field"><label>Nom</label><input type="text" id="na-name" placeholder="ex: claude, chatgpt-2..."></div>
+      <div class="scopes" id="na-scopes"></div>
+      <div class="field"><label>Tables autorisées (vide = toutes, sinon séparées par virgules)</label>
+        <input type="text" id="na-tables" placeholder="produits,clients"></div>
+      <button class="btn" onclick="createAgent()">Créer l'agent</button>
+      <div id="na-token"></div>
+    </div>
+    <h2 class="sec">Agents existants</h2>
+    <div id="agents"></div>
+  </div>
+
+  <!-- SKILLS -->
+  <div class="view" id="v-skills">
+    <h2 class="sec">Importer / créer un skill</h2>
+    <div class="agent">
+      <div class="field"><label>Nom</label><input type="text" id="ns-name" placeholder="ex: rapport.html"></div>
+      <div class="field"><label>Description</label><input type="text" id="ns-desc"></div>
+      <div class="field"><label>Catégorie</label><input type="text" id="ns-cat" placeholder="fichier, rapport..."></div>
+      <div class="field"><label>Instructions principales (SKILL.md) — ce que l'agent doit faire</label>
+        <textarea id="ns-instr" placeholder="Décris précisément les étapes, les actions API à appeler..."></textarea></div>
+      <div class="field"><label>Fichiers du skill (dossier) — optionnel</label>
+        <div id="ns-files"></div>
+        <button class="btn ghost" onclick="addFileRow()">+ Ajouter un fichier</button></div>
+      <button class="btn" onclick="createSkill()">Enregistrer le skill</button>
+    </div>
+    <h2 class="sec">Skills en base</h2>
+    <div id="skills"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $=(s,el=document)=>el.querySelector(s);
+const SCOPES=["data:read","data:write","tables:manage","skills:trigger","audit:read"];
+let OVERVIEW={};
+
+function getCookie(name){const m=document.cookie.match('(^|;)\\s*'+name+'\\s*=\\s*([^;]+)');return m?m.pop():''}
+async function api(path,method='GET',body=null){
+  const opt={method,headers:{'Content-Type':'application/json','X-CSRFToken':getCookie('csrftoken')}};
+  if(body)opt.body=JSON.stringify(body);
+  const r=await fetch(path,opt);const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d;
+}
+function toast(msg,ok=true){const t=$('#toast');t.textContent=msg;t.style.borderColor=ok?'var(--accent)':'var(--err)';
+  t.style.display='block';setTimeout(()=>t.style.display='none',2600);}
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');$('#v-'+t.dataset.v).classList.add('active');
+  if(t.dataset.v==='skills')loadSkills();
+});
+
+async function loadOverview(){
+  const d=await api('/manage/api/overview');OVERVIEW=d;
+  $('#stats').innerHTML=`
+    <div class="box"><b>${d.tables.length}</b>Tables</div>
+    <div class="box"><b>${d.skills.length}</b>Skills</div>
+    <div class="box"><b>${d.agents.length}</b>Agents</div>
+    <div class="box"><b>${d.artifacts}</b>Artefacts</div>
+    <div class="box"><b>${d.audit}</b>Audit</div>`;
+  $('#tbl-tables').innerHTML='<thead><tr><th>Nom</th><th>Lignes</th></tr></thead><tbody>'+
+    d.tables.map(t=>`<tr><td>${esc(t.name)}</td><td>${t.rows??'—'}</td></tr>`).join('')+'</tbody>';
+  $('#tbl-skills').innerHTML='<thead><tr><th>Nom</th><th>Source</th></tr></thead><tbody>'+
+    d.skills.map(s=>`<tr><td>${esc(s.name)}</td><td class="small">${esc(s.source)}${s.files?(' · '+s.files+' fichiers'):''}</td></tr>`).join('')+'</tbody>';
+  renderAgents(d.agents);renderNewAgentScopes();
+}
+
+function scopeChecks(id,current){
+  const all=current.includes('*');
+  return `<label><input type="checkbox" data-scope="*" ${all?'checked':''} onchange="toggleAll('${id}',this)"> Accès total (*)</label>`+
+    SCOPES.map(s=>`<label><input type="checkbox" data-scope="${s}" ${(all||current.includes(s))?'checked':''} ${all?'disabled':''}> ${s}</label>`).join('');
+}
+function toggleAll(id,cb){document.querySelectorAll(`#${id} input[data-scope]`).forEach(x=>{
+  if(x.dataset.scope!=='*'){x.disabled=cb.checked;if(cb.checked)x.checked=true;}});}
+function collectScopes(container){
+  const all=container.querySelector('input[data-scope="*"]');
+  if(all&&all.checked)return['*'];
+  return [...container.querySelectorAll('input[data-scope]')].filter(x=>x.dataset.scope!=='*'&&x.checked).map(x=>x.dataset.scope);
+}
+
+function renderNewAgentScopes(){$('#na-scopes').innerHTML=scopeChecks('na-scopes',[]);}
+function renderAgents(agents){
+  $('#agents').innerHTML=agents.map(a=>`
+    <div class="agent" id="ag-${a.id}">
+      <div class="row"><div class="name">${esc(a.name)} <span class="badge ${a.is_active?'on':'off'}">${a.is_active?'actif':'désactivé'}</span></div>
+        <div><button class="btn ghost" onclick="toggleActive(${a.id},${!a.is_active})">${a.is_active?'Désactiver':'Activer'}</button>
+        <button class="btn danger" onclick="delAgent(${a.id},'${esc(a.name)}')">Supprimer</button></div></div>
+      <div class="scopes" id="sc-${a.id}">${scopeChecks('sc-'+a.id,a.scopes||[])}</div>
+      <div class="field"><label>Tables autorisées (vide = toutes)</label>
+        <input type="text" id="tb-${a.id}" value="${esc((a.allowed_tables||[]).join(','))}"></div>
+      <button class="btn" onclick="saveAgent(${a.id})">Enregistrer les droits</button>
+    </div>`).join('') || '<p class="small">Aucun agent.</p>';
+}
+async function saveAgent(id){
+  const scopes=collectScopes($('#sc-'+id));
+  const tables=$('#tb-'+id).value.split(',').map(s=>s.trim()).filter(Boolean);
+  try{await api('/manage/api/agents/'+id+'/update','POST',{scopes,allowed_tables:tables});toast('Droits enregistrés ✓');loadOverview();}
+  catch(e){toast(e.message,false)}
+}
+async function toggleActive(id,val){try{await api('/manage/api/agents/'+id+'/update','POST',{is_active:val});loadOverview();}catch(e){toast(e.message,false)}}
+async function delAgent(id,name){if(!confirm('Supprimer l\\'agent '+name+' ?'))return;
+  try{await api('/manage/api/agents/'+id+'/delete','POST',{});toast('Agent supprimé');loadOverview();}catch(e){toast(e.message,false)}}
+async function createAgent(){
+  const name=$('#na-name').value.trim();if(!name)return toast('Nom requis',false);
+  const scopes=collectScopes($('#na-scopes'));
+  const tables=$('#na-tables').value.split(',').map(s=>s.trim()).filter(Boolean);
+  try{const d=await api('/manage/api/agents/create','POST',{name,scopes,allowed_tables:tables});
+    $('#na-token').innerHTML='<div class="tokenbox">TOKEN (copie-le maintenant, non ré-affichable) :<br>'+esc(d.token)+'</div>';
+    $('#na-name').value='';toast('Agent créé ✓');loadOverview();}catch(e){toast(e.message,false)}
+}
+
+/* SKILLS */
+function addFileRow(path='',content=''){
+  const div=document.createElement('div');div.className='filerow';
+  div.innerHTML=`<input type="text" placeholder="chemin (ex: templates/x.html)" value="${esc(path)}">
+    <input type="text" placeholder="contenu" value="${esc(content)}">
+    <button class="btn ghost" onclick="this.parentElement.remove()">✕</button>`;
+  $('#ns-files').appendChild(div);
+}
+async function loadSkills(){
+  const d=await api('/manage/api/skills');
+  $('#skills').innerHTML=d.skills.map(s=>`
+    <div class="agent"><div class="row"><div class="name">${esc(s.name)} <span class="small">${esc(s.category||'')}</span></div>
+      <button class="btn danger" onclick="delSkill('${esc(s.name)}')">Supprimer</button></div>
+      <div class="small">${esc(s.description||'')}</div>
+      <div class="small" style="margin-top:6px">Fichiers : ${s.files.map(f=>esc(f.path)).join(', ')||'—'}</div>
+    </div>`).join('')||'<p class="small">Aucun skill en base.</p>';
+}
+async function createSkill(){
+  const name=$('#ns-name').value.trim();if(!name)return toast('Nom requis',false);
+  const files=[...document.querySelectorAll('#ns-files .filerow')].map(r=>{
+    const i=r.querySelectorAll('input');return{path:i[0].value.trim(),content:i[1].value};
+  }).filter(f=>f.path);
+  try{await api('/manage/api/skills/create','POST',{name,description:$('#ns-desc').value,
+    category:$('#ns-cat').value,instructions:$('#ns-instr').value,files});
+    toast('Skill enregistré ✓');$('#ns-name').value='';$('#ns-desc').value='';$('#ns-instr').value='';$('#ns-files').innerHTML='';
+    loadSkills();loadOverview();}catch(e){toast(e.message,false)}
+}
+async function delSkill(name){if(!confirm('Supprimer le skill '+name+' ?'))return;
+  try{await api('/manage/api/skills/'+encodeURIComponent(name)+'/delete','POST',{});toast('Skill supprimé');loadSkills();loadOverview();}catch(e){toast(e.message,false)}}
+
+loadOverview().catch(e=>toast(e.message,false));
+</script>
+</body>
+</html>
