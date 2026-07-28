@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (
     ListTablesView, CreateTableView, AddColumnView, TableSchemaView,
     InsertView, SelectView, SearchView, UpdateView, DeleteView,
-    SkillsListView, SkillDefinitionView, SkillRunView,
+    SkillsListView, SkillDefinitionView, SkillFileView, SkillRunView,
     TaskDetailView, TaskResultView, AuditListView,
     ArtifactCreateView, ArtifactListView, ArtifactDetailView,
 )
@@ -25,6 +25,7 @@ urlpatterns = [
     # Skills & tâches
     path('skills/', SkillsListView.as_view(), name='skills-list'),
     path('skills/<str:name>/run/', SkillRunView.as_view(), name='skill-run'),
+    path('skills/<str:name>/files/<path:filepath>', SkillFileView.as_view(), name='skill-file'),
     path('skills/<str:name>/', SkillDefinitionView.as_view(), name='skill-definition'),
     path('tasks/<uuid:task_id>/', TaskDetailView.as_view(), name='task-detail'),
     path('tasks/<uuid:task_id>/result/', TaskResultView.as_view(), name='task-result'),

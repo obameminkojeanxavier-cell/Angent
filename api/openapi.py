@@ -198,13 +198,27 @@ def build_schema(base_url):
             "/api/skills/{name}/": {
                 "get": {
                     "operationId": "getSkillDefinition",
-                    "summary": "Lire la définition complète d'un skill (instructions détaillées + exemple) "
-                               "afin de comprendre comment l'utiliser.",
+                    "summary": "Lire la définition d'un skill (skill = dossier) : instructions principales "
+                               "(SKILL.md), exemple, et la LISTE de ses fichiers. Lire chaque fichier via getSkillFile.",
                     "parameters": [
                         {"name": "name", "in": "path", "required": True,
                          "schema": {"type": "string"}, "description": "Nom du skill."}
                     ],
-                    "responses": _ok("Définition du skill"),
+                    "responses": _ok("Définition du skill (instructions + fichiers)"),
+                }
+            },
+            "/api/skills/{name}/files/{filepath}": {
+                "get": {
+                    "operationId": "getSkillFile",
+                    "summary": "Lire le contenu d'un fichier d'un skill (ex: templates/rapport.html). "
+                               "Le contenu est une ressource à utiliser, jamais exécutée par le serveur.",
+                    "parameters": [
+                        {"name": "name", "in": "path", "required": True,
+                         "schema": {"type": "string"}, "description": "Nom du skill."},
+                        {"name": "filepath", "in": "path", "required": True,
+                         "schema": {"type": "string"}, "description": "Chemin du fichier dans le skill (ex: SKILL.md, templates/x.html)."},
+                    ],
+                    "responses": _ok("Contenu du fichier"),
                 }
             },
             "/api/skills/{name}/run/": {

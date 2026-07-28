@@ -98,6 +98,36 @@ class Skill(models.Model):
     def __str__(self):
         return self.name
 
+    @property
+    def entry_instructions(self):
+        """Instructions principales : contenu de SKILL.md si présent, sinon le champ instructions."""
+        entry = self.files.filter(path__iexact='SKILL.md').first()
+        if entry:
+            return entry.content
+        return self.instructions
+
+
+class SkillFile(models.Model):
+    """
+    Un fichier appartenant à un skill (skill = dossier). Chemin relatif dans le
+    dossier, ex: 'SKILL.md', 'templates/rapport.html', 'scripts/gen.py'.
+    Le contenu est stocké tel quel ; il n'est JAMAIS exécuté côté serveur.
+    """
+
+    skill = models.ForeignKey(Skill, related_name='files', on_delete=models.CASCADE)
+    path = models.CharField(max_length=255)
+    content = models.TextField(blank=True, default='')
+    content_type = models.CharField(max_length=100, default='text/plain')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['path']
+        unique_together = ('skill', 'path')
+
+    def __str__(self):
+        return f'{self.skill.name}/{self.path}'
+
 
 class Artifact(models.Model):
     """

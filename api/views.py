@@ -281,6 +281,18 @@ class SkillDefinitionView(ScopedView):
         return Response(definition, status=status.HTTP_200_OK)
 
 
+class SkillFileView(ScopedView):
+    """Lire un fichier d'un skill (skill = dossier de fichiers)."""
+    required_scope = SCOPE_SKILLS
+
+    def get(self, request, name, filepath):
+        f = skills_registry.get_skill_file(name, filepath)
+        if not f:
+            raise NotFound(f"Fichier introuvable : {name}/{filepath}")
+        audit(request, 'skill.file', f"{name}/{filepath}")
+        return Response(f, status=status.HTTP_200_OK)
+
+
 class SkillRunView(ScopedView):
     required_scope = SCOPE_SKILLS
 

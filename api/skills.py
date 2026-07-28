@@ -77,15 +77,33 @@ def get_definition(name):
         d = Skill.objects.get(name=name, is_active=True)
     except Exception:
         return None
+    files = [
+        {'path': f.path, 'content_type': f.content_type, 'size': len(f.content or '')}
+        for f in d.files.all()
+    ]
     return {
         'name': d.name,
         'description': d.description,
         'category': d.category,
         'source': 'db',
         'executable': False,
-        'instructions': d.instructions,
+        # Instructions principales = contenu de SKILL.md si présent.
+        'instructions': d.entry_instructions,
         'input_example': d.input_example,
+        # Le skill est un dossier : liste de ses fichiers (à lire via getSkillFile).
+        'files': files,
     }
+
+
+def get_skill_file(name, path):
+    """Contenu d'un fichier d'un skill (skill = dossier). None si introuvable."""
+    try:
+        from .models import Skill, SkillFile
+        skill = Skill.objects.get(name=name, is_active=True)
+        f = SkillFile.objects.get(skill=skill, path=path)
+    except Exception:
+        return None
+    return {'path': f.path, 'content_type': f.content_type, 'content': f.content}
 
 
 # --- Skills fournis par défaut ---------------------------------------------

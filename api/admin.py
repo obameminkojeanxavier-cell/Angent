@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from .models import AgentClient, SkillTask, AuditLog, Skill, Artifact
+from .models import AgentClient, SkillTask, AuditLog, Skill, SkillFile, Artifact
+
+
+class SkillFileInline(admin.TabularInline):
+    model = SkillFile
+    extra = 1
+    fields = ('path', 'content_type', 'content')
 
 
 @admin.register(Artifact)
@@ -17,6 +23,7 @@ class SkillAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'category')
     search_fields = ('name', 'description', 'instructions')
     readonly_fields = ('created_at', 'updated_at')
+    inlines = [SkillFileInline]
 
 
 @admin.register(AgentClient)
