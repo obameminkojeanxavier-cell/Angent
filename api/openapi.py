@@ -20,21 +20,13 @@ def _json_obj(properties=None, required=None):
 
 
 def _ok(description="Succès"):
-    return {
-        "200": {
-            "description": description,
-            "content": {"application/json": {"schema": {"type": "object", "additionalProperties": True}}},
-        }
-    }
+    # Pas de schéma de réponse : évite les warnings ChatGPT « object schema
+    # missing properties » (le corps de réponse reste du JSON libre).
+    return {"200": {"description": description}}
 
 
 def _created(description="Créé"):
-    return {
-        "201": {
-            "description": description,
-            "content": {"application/json": {"schema": {"type": "object", "additionalProperties": True}}},
-        }
-    }
+    return {"201": {"description": description}}
 
 
 def _body(schema):
@@ -56,9 +48,12 @@ def build_schema(base_url):
         "servers": [{"url": base_url}],
         "security": [{"bearerAuth": []}],
         "components": {
+            # schemas vide mais présent : évite le warning
+            # « components.schemas subsection is not an object ».
+            "schemas": {},
             "securitySchemes": {
                 "bearerAuth": {"type": "http", "scheme": "bearer"}
-            }
+            },
         },
         "paths": {
             "/api/tables/": {
