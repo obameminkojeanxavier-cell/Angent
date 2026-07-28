@@ -267,13 +267,38 @@ class SkillsListView(ScopedView):
         return Response({'skills': skills_registry.list_skills()}, status=status.HTTP_200_OK)
 
 
+class SkillDefinitionView(ScopedView):
+    """Définition complète d'un skill : l'agent la lit pour savoir l'utiliser."""
+    required_scope = SCOPE_SKILLS
+
+    def get(self, request, name):
+        definition = skills_registry.get_definition(name)
+        if not definition:
+            raise NotFound(f"Skill inconnu : {name}")
+        audit(request, 'skill.read', name)
+        return Response(definition, status=status.HTTP_200_OK)
+
+
 class SkillRunView(ScopedView):
     required_scope = SCOPE_SKILLS
 
     def post(self, request, name):
         skill = skills_registry.get_skill(name)
         if not skill:
-            raise NotFound(f"Skill inconnu : {name}")
+            # Skill « base » (instructionnel) : on renvoie ses instructions pour
+            # que l'agent les suive via les actions CRUD. Sinon 404.
+            definition = skills_registry.get_definition(name)
+            if not definition:
+                raise NotFound(f"Skill inconnu : {name}")
+            audit(request, 'skill.read', name)
+            return Response({
+                'skill': name,
+                'type': 'instructions',
+                'instructions': definition['instructions'],
+                'input_example': definition['input_example'],
+                'note': "Ce skill est instructionnel : suis ces instructions en "
+                        "appelant les actions (selectData, insertData, updateData, ...).",
+            }, status=status.HTTP_200_OK)
 
         client = request.user
         try:

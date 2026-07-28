@@ -191,8 +191,20 @@ def build_schema(base_url):
             "/api/skills/": {
                 "get": {
                     "operationId": "listSkills",
-                    "summary": "Lister les skills disponibles.",
+                    "summary": "Lister les skills disponibles (catalogue : nom, description, catégorie).",
                     "responses": _ok("Liste des skills"),
+                }
+            },
+            "/api/skills/{name}/": {
+                "get": {
+                    "operationId": "getSkillDefinition",
+                    "summary": "Lire la définition complète d'un skill (instructions détaillées + exemple) "
+                               "afin de comprendre comment l'utiliser.",
+                    "parameters": [
+                        {"name": "name", "in": "path", "required": True,
+                         "schema": {"type": "string"}, "description": "Nom du skill."}
+                    ],
+                    "responses": _ok("Définition du skill"),
                 }
             },
             "/api/skills/{name}/run/": {

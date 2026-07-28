@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import AgentClient, SkillTask, AuditLog
+from .models import AgentClient, SkillTask, AuditLog, Skill
+
+
+@admin.register(Skill)
+class SkillAdmin(admin.ModelAdmin):
+    list_display = ('name', 'category', 'description', 'is_active', 'updated_at')
+    list_filter = ('is_active', 'category')
+    search_fields = ('name', 'description', 'instructions')
+    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(AgentClient)

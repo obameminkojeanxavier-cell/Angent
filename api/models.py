@@ -66,6 +66,34 @@ class SkillTask(models.Model):
         return f'{self.skill}:{self.id}'
 
 
+class Skill(models.Model):
+    """
+    Skill enregistré en base, injecté manuellement par l'administrateur.
+
+    ChatGPT le LIT (nom, description, instructions, exemple) puis l'exécute en
+    suivant les instructions via les actions CRUD. Aucun code n'est stocké ni
+    exécuté ici : `instructions` est du texte que l'agent interprète.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    description = models.CharField(max_length=255, blank=True, default='')
+    category = models.CharField(max_length=100, blank=True, default='')
+    # Instructions détaillées : ce que l'agent doit faire, quelles actions
+    # appeler, dans quel ordre, avec quels paramètres.
+    instructions = models.TextField(blank=True, default='')
+    # Exemple d'entrée (paramètres attendus), pour guider l'agent.
+    input_example = models.JSONField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class AuditLog(models.Model):
     """Historique de toutes les opérations effectuées via les API."""
 
