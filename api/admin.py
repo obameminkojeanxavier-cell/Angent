@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import AgentClient, SkillTask, AuditLog, Skill
+from .models import AgentClient, SkillTask, AuditLog, Skill, Artifact
+
+
+@admin.register(Artifact)
+class ArtifactAdmin(admin.ModelAdmin):
+    list_display = ('slug', 'name', 'content_type', 'client', 'created_at')
+    list_filter = ('content_type',)
+    search_fields = ('slug', 'name')
+    readonly_fields = ('slug', 'created_at', 'updated_at')
 
 
 @admin.register(Skill)

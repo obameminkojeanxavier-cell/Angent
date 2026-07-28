@@ -1,6 +1,11 @@
+import secrets
 import uuid
 
 from django.db import models
+
+
+def _artifact_slug():
+    return secrets.token_urlsafe(8)
 
 
 class AgentClient(models.Model):
@@ -92,6 +97,32 @@ class Skill(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Artifact(models.Model):
+    """
+    Contenu produit par un agent (HTML, texte, CSV, JSON, Markdown, SVG…),
+    stocké et servi à une URL publique `/a/<slug>` : rendu si HTML, sinon
+    téléchargé. L'agent génère le contenu ; DataHub le conserve et l'expose.
+    """
+
+    slug = models.CharField(max_length=32, unique=True, default=_artifact_slug,
+                            editable=False, db_index=True)
+    name = models.CharField(max_length=200, blank=True, default='')
+    content_type = models.CharField(max_length=100, default='text/html')
+    content = models.TextField(blank=True, default='')
+    client = models.ForeignKey(
+        AgentClient, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='artifacts',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.name or self.slug} ({self.content_type})'
 
 
 class AuditLog(models.Model):

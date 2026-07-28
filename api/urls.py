@@ -4,6 +4,7 @@ from .views import (
     InsertView, SelectView, SearchView, UpdateView, DeleteView,
     SkillsListView, SkillDefinitionView, SkillRunView,
     TaskDetailView, TaskResultView, AuditListView,
+    ArtifactCreateView, ArtifactListView, ArtifactDetailView,
 )
 
 # Auth et scopes définis sur chaque vue.
@@ -27,6 +28,11 @@ urlpatterns = [
     path('skills/<str:name>/', SkillDefinitionView.as_view(), name='skill-definition'),
     path('tasks/<uuid:task_id>/', TaskDetailView.as_view(), name='task-detail'),
     path('tasks/<uuid:task_id>/result/', TaskResultView.as_view(), name='task-result'),
+
+    # Artefacts (fichiers produits par les agents)
+    path('artifacts/', ArtifactListView.as_view(), name='artifacts-list'),
+    path('artifacts/create/', ArtifactCreateView.as_view(), name='artifact-create'),
+    path('artifacts/<str:slug>/', ArtifactDetailView.as_view(), name='artifact-detail'),
 
     # Audit
     path('audit/', AuditListView.as_view(), name='audit-list'),

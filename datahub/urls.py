@@ -6,6 +6,7 @@ from api.mcp import mcp_view
 from api.docs import skill_doc, api_doc
 from api.console import console_run, console_skills
 from api.openapi import openapi_schema
+from api.artifacts import render_artifact
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -15,6 +16,9 @@ urlpatterns = [
     path('skill.md', skill_doc, name='skill-doc'),
     # Schéma OpenAPI pour les "Actions" d'un GPT personnalisé (ChatGPT)
     path('openapi.json', openapi_schema, name='openapi'),
+    # Rendu public des artefacts (fichiers produits par les agents)
+    path('a/<str:slug>', render_artifact, name='artifact-render'),
+    path('a/<str:slug>/', render_artifact),
     # Console d'exécution (interface GOD HAND)
     path('console/skills', console_skills, name='console-skills'),
     path('console/run', console_run, name='console-run'),

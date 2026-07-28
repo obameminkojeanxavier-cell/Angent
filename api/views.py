@@ -6,15 +6,17 @@ from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, NotFound
 from django.core.exceptions import ValidationError
 
+from django.conf import settings
+
 from .authentication import AgentTokenAuthentication
 from .permissions import ReadAccess, HasScope
 from .db_operations import DatabaseOperations
 from .audit import audit
 from .tokens import (
-    SCOPE_DATA_WRITE, SCOPE_TABLES, SCOPE_SKILLS, SCOPE_AUDIT,
+    SCOPE_DATA_READ, SCOPE_DATA_WRITE, SCOPE_TABLES, SCOPE_SKILLS, SCOPE_AUDIT,
 )
 from . import skills as skills_registry
-from .models import SkillTask, AuditLog
+from .models import SkillTask, AuditLog, Artifact
 
 
 # --- Bases ------------------------------------------------------------------
@@ -359,6 +361,80 @@ def _get_owned_task(request, task_id):
     if not user.has_scope('*') and task.client_id and getattr(user, 'pk', None) and task.client_id != user.pk:
         raise PermissionDenied("Cette tâche appartient à un autre client.")
     return task
+
+
+# --- Artefacts (fichiers produits) ------------------------------------------
+
+# Types de contenu autorisés pour un artefact.
+ARTIFACT_CONTENT_TYPES = {
+    'text/html', 'text/plain', 'text/csv', 'application/json',
+    'text/markdown', 'image/svg+xml',
+}
+
+
+def _artifact_url(request, slug):
+    base = getattr(settings, 'OPENAPI_BASE_URL', '') or f"{request.scheme}://{request.get_host()}"
+    return f"{base}/a/{slug}"
+
+
+class ArtifactCreateView(ScopedView):
+    """Créer un artefact (contenu produit par l'agent). Renvoie son URL publique."""
+    required_scope = SCOPE_DATA_WRITE
+
+    def post(self, request):
+        name = request.data.get('name', '')
+        content = request.data.get('content')
+        content_type = (request.data.get('content_type') or 'text/html').lower().strip()
+        if content is None or content == '':
+            return Response({'error': 'content is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if content_type not in ARTIFACT_CONTENT_TYPES:
+            return Response(
+                {'error': f"content_type invalide. Autorisés : {sorted(ARTIFACT_CONTENT_TYPES)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        client = request.user
+        artifact = Artifact.objects.create(
+            name=name or '', content_type=content_type, content=str(content),
+            client=client if getattr(client, 'pk', None) else None,
+        )
+        url = _artifact_url(request, artifact.slug)
+        audit(request, 'artifact.create', artifact.slug, detail={'content_type': content_type, 'name': name})
+        return Response(
+            {'slug': artifact.slug, 'url': url, 'name': artifact.name, 'content_type': content_type},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ArtifactListView(ScopedView):
+    required_scope = SCOPE_DATA_READ
+
+    def get(self, request):
+        try:
+            limit = int(request.query_params.get('limit', 50))
+        except (ValueError, TypeError):
+            limit = 50
+        limit = max(1, min(limit, 500))
+        items = Artifact.objects.all()[:limit]
+        data = [{
+            'slug': a.slug, 'name': a.name, 'content_type': a.content_type,
+            'url': _artifact_url(request, a.slug), 'created_at': a.created_at.isoformat(),
+        } for a in items]
+        return Response({'count': len(data), 'artifacts': data}, status=status.HTTP_200_OK)
+
+
+class ArtifactDetailView(ScopedView):
+    required_scope = SCOPE_DATA_READ
+
+    def get(self, request, slug):
+        try:
+            a = Artifact.objects.get(slug=slug)
+        except Artifact.DoesNotExist:
+            raise NotFound("Artefact introuvable")
+        return Response({
+            'slug': a.slug, 'name': a.name, 'content_type': a.content_type,
+            'url': _artifact_url(request, a.slug), 'content': a.content,
+            'created_at': a.created_at.isoformat(),
+        }, status=status.HTTP_200_OK)
 
 
 # --- Audit ------------------------------------------------------------------

@@ -233,6 +233,45 @@ def build_schema(base_url):
                     "responses": _ok("État de la tâche"),
                 }
             },
+            "/api/artifacts/create/": {
+                "post": {
+                    "operationId": "createArtifact",
+                    "summary": "Publier un fichier/contenu produit (HTML, texte, CSV, JSON, Markdown, SVG) "
+                               "et obtenir une URL publique à donner à l'utilisateur.",
+                    "requestBody": _body(_json_obj(
+                        properties={
+                            "content": {"type": "string", "description": "Le contenu complet du fichier (ex: le code HTML)."},
+                            "name": {"type": "string", "description": "Nom lisible (optionnel)."},
+                            "content_type": {"type": "string",
+                                             "description": "Type MIME : text/html (défaut), text/plain, text/csv, application/json, text/markdown, image/svg+xml."},
+                        },
+                        required=["content"],
+                    )),
+                    "responses": _created("Artefact créé (renvoie slug + url)"),
+                }
+            },
+            "/api/artifacts/": {
+                "get": {
+                    "operationId": "listArtifacts",
+                    "summary": "Lister les artefacts récents (métadonnées + URL).",
+                    "parameters": [
+                        {"name": "limit", "in": "query", "required": False,
+                         "schema": {"type": "integer", "minimum": 1, "maximum": 500}}
+                    ],
+                    "responses": _ok("Liste des artefacts"),
+                }
+            },
+            "/api/artifacts/{slug}/": {
+                "get": {
+                    "operationId": "getArtifact",
+                    "summary": "Récupérer un artefact (métadonnées + contenu + URL).",
+                    "parameters": [
+                        {"name": "slug", "in": "path", "required": True,
+                         "schema": {"type": "string"}}
+                    ],
+                    "responses": _ok("Artefact"),
+                }
+            },
             "/api/audit/": {
                 "get": {
                     "operationId": "listAudit",
