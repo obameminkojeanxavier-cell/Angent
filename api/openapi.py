@@ -115,9 +115,9 @@ def build_schema(base_url):
                         properties={
                             "table_name": {"type": "string"},
                             "columns": {
-                                "type": "object",
-                                "additionalProperties": {"type": "string"},
-                                "description": "Association nom_colonne -> type SQL (ex: {\"nom\":\"varchar(100)\",\"prix\":\"numeric\"}).",
+                                "type": "string",
+                                "description": "Objet JSON encodé en CHAÎNE, associant nom_colonne -> type SQL. "
+                                               "Exemple exact : {\"nom\":\"varchar(150)\",\"prix\":\"numeric\",\"statut\":\"varchar(30)\"}",
                             },
                         },
                         required=["table_name", "columns"],
@@ -147,8 +147,9 @@ def build_schema(base_url):
                     "requestBody": _body(_json_obj(
                         properties={
                             "table_name": {"type": "string"},
-                            "data": {"type": "object", "additionalProperties": True,
-                                     "description": "Association colonne -> valeur."},
+                            "data": {"type": "string",
+                                     "description": "Objet JSON encodé en CHAÎNE, colonne -> valeur. "
+                                                    "Exemple : {\"nom\":\"Clavier sans fil\",\"prix\":15000,\"statut\":\"actif\"}"},
                         },
                         required=["table_name", "data"],
                     )),
@@ -162,10 +163,10 @@ def build_schema(base_url):
                     "requestBody": _body(_json_obj(
                         properties={
                             "table_name": {"type": "string"},
-                            "data": {"type": "object", "additionalProperties": True,
-                                     "description": "Nouvelles valeurs."},
-                            "filters": {"type": "object", "additionalProperties": True,
-                                        "description": "Condition WHERE (égalité), obligatoire."},
+                            "data": {"type": "string",
+                                     "description": "Objet JSON (chaîne) des nouvelles valeurs. Ex: {\"prix\":18000}"},
+                            "filters": {"type": "string",
+                                        "description": "Objet JSON (chaîne) condition WHERE (égalité), obligatoire. Ex: {\"id\":25}"},
                         },
                         required=["table_name", "data", "filters"],
                     )),
@@ -179,8 +180,8 @@ def build_schema(base_url):
                     "requestBody": _body(_json_obj(
                         properties={
                             "table_name": {"type": "string"},
-                            "filters": {"type": "object", "additionalProperties": True,
-                                        "description": "Condition WHERE (égalité), obligatoire."},
+                            "filters": {"type": "string",
+                                        "description": "Objet JSON (chaîne) condition WHERE (égalité), obligatoire. Ex: {\"id\":25}"},
                         },
                         required=["table_name", "filters"],
                     )),
@@ -203,7 +204,8 @@ def build_schema(base_url):
                          "schema": {"type": "string"}, "description": "Nom du skill."}
                     ],
                     "requestBody": _body(_json_obj(
-                        properties={"params": {"type": "object", "additionalProperties": True}},
+                        properties={"params": {"type": "string",
+                                               "description": "Objet JSON (chaîne) des paramètres du skill. Ex: {\"table_name\":\"produits\",\"q\":\"clavier\"}"}},
                     )),
                     "responses": _ok("Tâche exécutée"),
                 }

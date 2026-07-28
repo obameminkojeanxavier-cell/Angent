@@ -1,3 +1,5 @@
+import json
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -130,12 +132,12 @@ class CreateTableView(ScopedView):
 
     def post(self, request):
         table_name = request.data.get('table_name')
-        columns = request.data.get('columns', {})
         if not table_name:
             return Response({'error': 'table_name is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if not columns:
-            return Response({'error': 'columns dict is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
+            columns = _coerce_obj(request.data.get('columns'), 'columns')
+            if not columns:
+                return Response({'error': 'columns is required'}, status=status.HTTP_400_BAD_REQUEST)
             _check_table(request, table_name)
             DatabaseOperations.create_table(table_name, columns)
             audit(request, 'create_table', table_name, detail={'columns': list(columns)})
@@ -179,12 +181,12 @@ class InsertView(ScopedView):
 
     def post(self, request):
         table_name = request.data.get('table_name')
-        data = request.data.get('data', {})
         if not table_name:
             return Response({'error': 'table_name is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if not data:
-            return Response({'error': 'data dict is required'}, status=status.HTTP_400_BAD_REQUEST)
         try:
+            data = _coerce_obj(request.data.get('data'), 'data')
+            if not data:
+                return Response({'error': 'data is required'}, status=status.HTTP_400_BAD_REQUEST)
             _check_table(request, table_name)
             record = DatabaseOperations.insert(table_name, data)
             row_id = record.get('id') if isinstance(record, dict) else record
@@ -208,15 +210,15 @@ class UpdateView(ScopedView):
 
     def put(self, request):
         table_name = request.data.get('table_name')
-        data = request.data.get('data', {})
-        filters = request.data.get('filters', {})
         if not table_name:
             return Response({'error': 'table_name is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if not data:
-            return Response({'error': 'data dict is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if not filters:
-            return Response({'error': 'filters dict is required for safety'}, status=status.HTTP_400_BAD_REQUEST)
         try:
+            data = _coerce_obj(request.data.get('data'), 'data')
+            filters = _coerce_obj(request.data.get('filters'), 'filters')
+            if not data:
+                return Response({'error': 'data is required'}, status=status.HTTP_400_BAD_REQUEST)
+            if not filters:
+                return Response({'error': 'filters is required for safety'}, status=status.HTTP_400_BAD_REQUEST)
             _check_table(request, table_name)
             row_count = DatabaseOperations.update(table_name, data, filters)
             audit(request, 'update', table_name, detail={'rows': row_count})
@@ -236,12 +238,12 @@ class DeleteView(ScopedView):
 
     def delete(self, request):
         table_name = request.data.get('table_name')
-        filters = request.data.get('filters', {})
         if not table_name:
             return Response({'error': 'table_name is required'}, status=status.HTTP_400_BAD_REQUEST)
-        if not filters:
-            return Response({'error': 'filters dict is required for safety'}, status=status.HTTP_400_BAD_REQUEST)
         try:
+            filters = _coerce_obj(request.data.get('filters'), 'filters')
+            if not filters:
+                return Response({'error': 'filters is required for safety'}, status=status.HTTP_400_BAD_REQUEST)
             _check_table(request, table_name)
             row_count = DatabaseOperations.delete(table_name, filters)
             audit(request, 'delete', table_name, detail={'rows': row_count})
@@ -274,7 +276,10 @@ class SkillRunView(ScopedView):
             raise NotFound(f"Skill inconnu : {name}")
 
         client = request.user
-        params = request.data.get('params') or {}
+        try:
+            params = _coerce_obj(request.data.get('params'), 'params')
+        except ValidationError as e:
+            return _bad(e)
         task = SkillTask.objects.create(
             client=client if getattr(client, 'pk', None) else None,
             skill=name, params=params, status='running',
@@ -360,3 +365,23 @@ class AuditListView(ScopedView):
 
 def _bad(exc):
     return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+def _coerce_obj(value, field):
+    """
+    Accepte un objet JSON OU une chaîne JSON (les GPT Actions envoient une
+    chaîne pour les objets libres). Renvoie un dict.
+    """
+    if value in (None, ''):
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except ValueError:
+            raise ValidationError(f"'{field}' doit être un objet JSON valide")
+        if not isinstance(parsed, dict):
+            raise ValidationError(f"'{field}' doit être un objet JSON")
+        return parsed
+    raise ValidationError(f"'{field}' doit être un objet JSON")
