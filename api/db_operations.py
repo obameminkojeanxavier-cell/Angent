@@ -7,21 +7,39 @@ from .validators import validate_identifier, validate_sql_type
 MAX_SELECT_LIMIT = 1000
 DEFAULT_SELECT_LIMIT = 100
 
+# Tables système (Django + app) : masquées aux agents et protégées en
+# lecture/écriture. Les agents ne manipulent que des tables « métier ».
+SYSTEM_TABLE_PREFIXES = ('django_', 'auth_', 'api_')
+
+
+def is_system_table(name):
+    return name.startswith(SYSTEM_TABLE_PREFIXES)
+
+
+def _guard_business_table(table_name):
+    """Valide le nom ET refuse les tables système."""
+    validate_identifier(table_name)
+    if is_system_table(table_name):
+        raise ValidationError(
+            f"Table système protégée : '{table_name}'. "
+            "Les agents ne peuvent agir que sur des tables métier."
+        )
+
 
 class DatabaseOperations:
     """Safe database operations with validated inputs."""
-    
+
     @staticmethod
     def list_tables():
-        """List all tables in the database."""
+        """Liste les tables métier (les tables système sont masquées)."""
         with connection.cursor() as cursor:
             cursor.execute("""
-                SELECT table_name 
-                FROM information_schema.tables 
+                SELECT table_name
+                FROM information_schema.tables
                 WHERE table_schema = 'public'
                 ORDER BY table_name;
             """)
-            tables = [row[0] for row in cursor.fetchall()]
+            tables = [row[0] for row in cursor.fetchall() if not is_system_table(row[0])]
         return tables
     
     @staticmethod
@@ -33,7 +51,7 @@ class DatabaseOperations:
             table_name: Validated table name
             columns: Dict of {column_name: sql_type}
         """
-        validate_identifier(table_name)
+        _guard_business_table(table_name)
         
         column_defs = []
         for col_name, col_type in columns.items():
@@ -56,7 +74,7 @@ class DatabaseOperations:
     @staticmethod
     def add_column(table_name, column_name, column_type):
         """Add a column to an existing table."""
-        validate_identifier(table_name)
+        _guard_business_table(table_name)
         validate_identifier(column_name)
         validate_sql_type(column_type)
         
@@ -78,7 +96,7 @@ class DatabaseOperations:
         Returns:
             Dict with the complete inserted record including id and created_at
         """
-        validate_identifier(table_name)
+        _guard_business_table(table_name)
 
         if not data:
             raise ValueError("At least one column/value pair is required")
@@ -113,7 +131,7 @@ class DatabaseOperations:
             filters: Dict of {column_name: value} for WHERE clause
             limit: Maximum number of rows to return
         """
-        validate_identifier(table_name)
+        _guard_business_table(table_name)
         
         query = f'SELECT * FROM "{table_name}"'
         params = []
@@ -162,7 +180,7 @@ class DatabaseOperations:
             data: Dict of {column_name: new_value}
             filters: Dict of {column_name: value} for WHERE clause
         """
-        validate_identifier(table_name)
+        _guard_business_table(table_name)
         
         if not data:
             raise ValueError("At least one column/value pair to update is required")
@@ -203,7 +221,7 @@ class DatabaseOperations:
             table_name: Validated table name
             filters: Dict of {column_name: value} for WHERE clause
         """
-        validate_identifier(table_name)
+        _guard_business_table(table_name)
         
         if not filters:
             raise ValueError("At least one filter condition is required for safety")
@@ -228,7 +246,7 @@ class DatabaseOperations:
     @staticmethod
     def get_table_schema(table_name):
         """Get the schema (columns) of a table."""
-        validate_identifier(table_name)
+        _guard_business_table(table_name)
         
         with connection.cursor() as cursor:
             cursor.execute("""
@@ -251,7 +269,7 @@ class DatabaseOperations:
     @staticmethod
     def count(table_name):
         """Nombre de lignes d'une table."""
-        validate_identifier(table_name)
+        _guard_business_table(table_name)
         with connection.cursor() as cursor:
             cursor.execute(f'SELECT COUNT(*) FROM "{table_name}"')
             return cursor.fetchone()[0]
@@ -264,7 +282,7 @@ class DatabaseOperations:
         Si `columns` n'est pas fourni, recherche sur toutes les colonnes texte.
         Les identifiants sont validés ; la valeur recherchée est paramétrée.
         """
-        validate_identifier(table_name)
+        _guard_business_table(table_name)
 
         if not columns:
             schema = DatabaseOperations.get_table_schema(table_name)
