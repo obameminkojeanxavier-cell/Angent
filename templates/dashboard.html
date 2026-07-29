@@ -72,7 +72,7 @@ h2.sec{margin:18px 0 6px;font-size:16px}
       <div class="tab" data-v="agents">Agents &amp; Droits</div>
       <div class="tab" data-v="skills">Skills</div>
     </div>
-    <div class="small"><a href="/">← Console</a> &nbsp;·&nbsp; <a href="/admin/logout/">Déconnexion</a></div>
+    <div class="small"><a href="/">← Console</a> &nbsp;·&nbsp; <a href="/manage/logout/">Déconnexion</a></div>
   </div>
 
   <!-- VUE D'ENSEMBLE -->
@@ -106,6 +106,8 @@ h2.sec{margin:18px 0 6px;font-size:16px}
       <div class="field"><label>Nom</label><input type="text" id="ns-name" placeholder="ex: rapport.html"></div>
       <div class="field"><label>Description</label><input type="text" id="ns-desc"></div>
       <div class="field"><label>Catégorie</label><input type="text" id="ns-cat" placeholder="fichier, rapport..."></div>
+      <div class="field"><label><input type="checkbox" id="ns-orch" style="width:auto;margin-right:8px">
+        Skill ORCHESTRATEUR (point d'entrée / verrou — n'en garder qu'un seul actif)</label></div>
       <div class="field"><label>Instructions principales (SKILL.md) — ce que l'agent doit faire</label>
         <textarea id="ns-instr" placeholder="Décris précisément les étapes, les actions API à appeler..."></textarea></div>
       <div class="field"><label>Fichiers du skill (dossier) — optionnel</label>
@@ -211,12 +213,23 @@ function addFileRow(path='',content=''){
 }
 async function loadSkills(){
   const d=await api('/manage/api/skills');
-  $('#skills').innerHTML=d.skills.map(s=>`
-    <div class="agent"><div class="row"><div class="name">${esc(s.name)} <span class="small">${esc(s.category||'')}</span></div>
-      <button class="btn danger" onclick="delSkill('${esc(s.name)}')">Supprimer</button></div>
+  const banner = d.orchestrator_active
+    ? '<div class="small" style="color:var(--ok)">✓ Orchestrateur actif — les agents peuvent agir.</div>'
+    : '<div class="agent" style="border-color:var(--err)"><b style="color:var(--err)">⚠️ Aucun orchestrateur actif</b><div class="small">Tant qu\'aucun skill « orchestrateur » n\'est actif, les agents n\'ont AUCUN accès au serveur/base. Crée-en un (coche « Skill ORCHESTRATEUR » ci-dessus) ou importe-le.</div></div>';
+  $('#skills').innerHTML=banner+d.skills.map(s=>`
+    <div class="agent"><div class="row">
+      <div class="name">${esc(s.name)} ${s.is_orchestrator?'<span class="badge" style="background:rgba(255,106,61,.18);color:var(--accent2)">ORCHESTRATEUR</span>':''} <span class="badge ${s.is_active?'on':'off'}">${s.is_active?'actif':'inactif'}</span> <span class="small">${esc(s.kind||s.category||'')}</span></div>
+      <div>
+        <button class="btn ghost" onclick="toggleSkill('${esc(s.name)}')">${s.is_active?'Désactiver':'Activer'}</button>
+        <button class="btn danger" onclick="delSkill('${esc(s.name)}')">Supprimer</button>
+      </div></div>
       <div class="small">${esc(s.description||'')}</div>
       <div class="small" style="margin-top:6px">Fichiers : ${s.files.map(f=>esc(f.path)).join(', ')||'—'}</div>
-    </div>`).join('')||'<p class="small">Aucun skill en base.</p>';
+    </div>`).join('')||'<p class="small">Aucun skill en base. Utilise le formulaire ci-dessus pour en créer un.</p>';
+}
+async function toggleSkill(name){
+  try{await api('/manage/api/skills/'+encodeURIComponent(name)+'/toggle','POST',{});toast('Statut mis à jour ✓');loadSkills();loadOverview();}
+  catch(e){toast(e.message,false)}
 }
 async function createSkill(){
   const name=$('#ns-name').value.trim();if(!name)return toast('Nom requis',false);
@@ -224,8 +237,8 @@ async function createSkill(){
     const i=r.querySelectorAll('input');return{path:i[0].value.trim(),content:i[1].value};
   }).filter(f=>f.path);
   try{await api('/manage/api/skills/create','POST',{name,description:$('#ns-desc').value,
-    category:$('#ns-cat').value,instructions:$('#ns-instr').value,files});
-    toast('Skill enregistré ✓');$('#ns-name').value='';$('#ns-desc').value='';$('#ns-instr').value='';$('#ns-files').innerHTML='';
+    category:$('#ns-cat').value,instructions:$('#ns-instr').value,is_orchestrator:$('#ns-orch').checked,files});
+    toast('Skill enregistré ✓');$('#ns-name').value='';$('#ns-desc').value='';$('#ns-instr').value='';$('#ns-files').innerHTML='';$('#ns-orch').checked=false;
     loadSkills();loadOverview();}catch(e){toast(e.message,false)}
 }
 async function delSkill(name){if(!confirm('Supprimer le skill '+name+' ?'))return;

@@ -11,10 +11,11 @@ seul un administrateur connecté peut les appeler.
 import json
 
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth import logout as auth_logout
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 
 from .models import AgentClient, Skill, SkillFile, Artifact, AuditLog
 from .db_operations import DatabaseOperations
@@ -44,35 +45,88 @@ def dashboard(request):
     return render(request, 'dashboard.html', {'all_scopes': ALL_SCOPES})
 
 
+def logout_view(request):
+    """Déconnexion (GET ou POST) puis redirection vers la page de connexion admin."""
+    auth_logout(request)
+    return redirect('/admin/login/?loggedout=1')
+
+
+def _skill_catalog(active_only=False):
+    """Catalogue des skills : natifs + base."""
+    items = [
+        {'name': b['name'], 'description': b['description'], 'category': 'builtin',
+         'source': 'builtin', 'is_active': True, 'files': 0}
+        for b in skills_registry._REGISTRY.values()
+    ]
+    try:
+        qs = Skill.objects.all()
+        if active_only:
+            qs = qs.filter(is_active=True)
+        for s in qs:
+            items.append({
+                'name': s.name, 'description': s.description, 'category': s.category or 'db',
+                'source': 'db', 'is_active': s.is_active, 'files': s.files.count(),
+                'updated_at': s.updated_at.isoformat(),
+            })
+    except Exception:
+        pass
+    return items
+
+
+def public_skills(request):
+    """Catalogue PUBLIC (sans auth) des skills actifs, pour la page d'accueil."""
+    return JsonResponse({'skills': _skill_catalog(active_only=True)})
+
+
 def overview(request):
     if not _is_staff(request):
         return _forbidden()
 
+    # Chaque section est protégée : une erreur (ex: migration manquante) ne doit
+    # pas vider tout le tableau de bord.
     tables = []
-    for t in DatabaseOperations.list_tables():
-        try:
-            rows = DatabaseOperations.count(t)
-        except Exception:
-            rows = None
-        tables.append({'name': t, 'rows': rows})
+    try:
+        for t in DatabaseOperations.list_tables():
+            try:
+                rows = DatabaseOperations.count(t)
+            except Exception:
+                rows = None
+            tables.append({'name': t, 'rows': rows})
+    except Exception:
+        pass
 
-    skills = [
-        {'name': b['name'], 'description': b['description'], 'source': 'builtin', 'files': 0, 'is_active': True}
-        for b in skills_registry._REGISTRY.values()
-    ]
-    for s in Skill.objects.all():
-        skills.append({
-            'name': s.name, 'description': s.description, 'source': 'db',
-            'category': s.category, 'files': s.files.count(), 'is_active': s.is_active,
-        })
+    skills = _skill_catalog()
+    try:
+        agents = [_agent_dict(a) for a in AgentClient.objects.all()]
+    except Exception:
+        agents = []
+    try:
+        artifacts = Artifact.objects.count()
+    except Exception:
+        artifacts = 0
+    try:
+        audit = AuditLog.objects.count()
+    except Exception:
+        audit = 0
 
+    active_skills = sum(1 for s in skills if s.get('is_active'))
     return JsonResponse({
         'tables': tables,
         'skills': skills,
-        'agents': [_agent_dict(a) for a in AgentClient.objects.all()],
-        'artifacts': Artifact.objects.count(),
-        'audit': AuditLog.objects.count(),
+        'agents': agents,
+        'artifacts': artifacts,
+        'audit': audit,
         'all_scopes': ALL_SCOPES,
+        'stats': {
+            'tables': len(tables),
+            'skills_total': len(skills),
+            'skills_active': active_skills,
+            'skills_inactive': len(skills) - active_skills,
+            'agents_total': len(agents),
+            'agents_active': sum(1 for a in agents if a.get('is_active')),
+            'artifacts': artifacts,
+            'audit': audit,
+        },
     })
 
 
@@ -131,11 +185,11 @@ def skills_list(request):
     for s in Skill.objects.all():
         data.append({
             'name': s.name, 'description': s.description, 'category': s.category,
-            'is_active': s.is_active,
+            'kind': s.kind, 'is_orchestrator': s.is_orchestrator, 'is_active': s.is_active,
             'files': [{'path': f.path, 'content_type': f.content_type, 'size': len(f.content or '')}
                       for f in s.files.all()],
         })
-    return JsonResponse({'skills': data})
+    return JsonResponse({'skills': data, 'orchestrator_active': skills_registry.orchestrator_active()})
 
 
 @require_POST
@@ -146,11 +200,14 @@ def skill_create(request):
     name = (body.get('name') or '').strip()
     if not name:
         return JsonResponse({'error': 'Nom requis'}, status=400)
+    is_orch = bool(body.get('is_orchestrator'))
     skill, _ = Skill.objects.update_or_create(
         name=name,
         defaults={
             'description': body.get('description', ''),
             'category': body.get('category', ''),
+            'kind': ('orchestrateur' if is_orch else body.get('kind', '')),
+            'is_orchestrator': is_orch,
             'instructions': body.get('instructions', ''),
             'is_active': True,
         },
@@ -169,6 +226,19 @@ def skill_create(request):
     if instr and not skill.files.filter(path__iexact='SKILL.md').exists():
         SkillFile.objects.create(skill=skill, path='SKILL.md', content=instr, content_type='text/markdown')
     return JsonResponse({'ok': True, 'name': name})
+
+
+@require_POST
+def skill_toggle(request, name):
+    if not _is_staff(request):
+        return _forbidden()
+    try:
+        s = Skill.objects.get(name=name)
+    except Skill.DoesNotExist:
+        return JsonResponse({'error': 'Skill introuvable'}, status=404)
+    s.is_active = not s.is_active
+    s.save()
+    return JsonResponse({'ok': True, 'is_active': s.is_active})
 
 
 @require_POST

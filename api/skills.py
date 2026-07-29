@@ -23,6 +23,15 @@ def register(name, description='', scope=SCOPE_SKILLS):
     return deco
 
 
+def orchestrator_active():
+    """True si au moins un skill orchestrateur actif est installé."""
+    try:
+        from .models import Skill
+        return Skill.objects.filter(is_orchestrator=True, is_active=True).exists()
+    except Exception:
+        return False
+
+
 def get_skill(name):
     """Skill NATIF (exécutable côté serveur). None si absent."""
     return _REGISTRY.get(name)

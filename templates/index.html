@@ -1,233 +1,148 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GOD HAND — Console d'exécution IA</title>
-    <style>
-        :root {
-            --bg: #08080b;
-            --bg2: #0e0e13;
-            --panel: #121219;
-            --border: #23232e;
-            --text: #e7e7ee;
-            --muted: #8a8a99;
-            --accent: #ff2d4a;
-            --accent2: #ff6a3d;
-            --ok: #35d07f;
-            --err: #ff4d5e;
-            --db: #6aa0ff;
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { height: 100%; }
-        body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            background:
-                radial-gradient(1200px 600px at 50% -10%, rgba(255,45,74,0.12), transparent 60%),
-                radial-gradient(900px 500px at 90% 110%, rgba(255,106,61,0.08), transparent 55%),
-                var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 28px 18px 60px;
-        }
-        .brand {
-            text-align: center;
-            margin-bottom: 6px;
-        }
-        .brand h1 {
-            font-size: clamp(28px, 5vw, 46px);
-            letter-spacing: 8px;
-            font-weight: 800;
-            background: linear-gradient(90deg, var(--accent), var(--accent2));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            text-shadow: 0 0 40px rgba(255,45,74,0.35);
-        }
-        .brand p { color: var(--muted); letter-spacing: 3px; font-size: 12px; text-transform: uppercase; margin-top: 4px; }
-
-        .console {
-            width: 100%;
-            max-width: 1000px;
-            margin-top: 22px;
-            display: flex;
-            flex-direction: column;
-            gap: 18px;
-        }
-        .controls {
-            display: flex;
-            gap: 14px;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: center;
-        }
-        select {
-            background: var(--panel);
-            color: var(--text);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 13px 16px;
-            font-size: 14px;
-            min-width: 260px;
-            outline: none;
-        }
-        select:focus { border-color: var(--accent); }
-
-        .upload-btn {
-            position: relative;
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            background: linear-gradient(135deg, var(--accent), var(--accent2));
-            color: #fff;
-            border: none;
-            border-radius: 12px;
-            padding: 14px 26px;
-            font-size: 15px;
-            font-weight: 700;
-            letter-spacing: 0.4px;
-            cursor: pointer;
-            box-shadow: 0 8px 30px rgba(255,45,74,0.35);
-            transition: transform .15s, box-shadow .15s, opacity .15s;
-        }
-        .upload-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(255,45,74,0.5); }
-        .upload-btn:active { transform: translateY(0); }
-        .upload-btn[disabled] { opacity: .6; cursor: not-allowed; box-shadow: none; }
-        #file { display: none; }
-
-        .results {
-            background: linear-gradient(180deg, var(--bg2), var(--panel));
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            min-height: 420px;
-            padding: 22px;
-            box-shadow: inset 0 0 60px rgba(0,0,0,0.5);
-        }
-        .placeholder {
-            height: 100%;
-            min-height: 360px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 14px;
-            color: var(--muted);
-            text-align: center;
-        }
-        .placeholder .glyph { font-size: 54px; filter: drop-shadow(0 0 22px rgba(255,45,74,0.5)); }
-
-        .docinfo {
-            display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 14px; margin-bottom: 16px;
-        }
-        .docinfo .name { font-weight: 700; }
-        .docinfo .meta { color: var(--muted); font-size: 13px; }
-        .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
-        .badge.ok { background: rgba(53,208,127,0.15); color: var(--ok); }
-        .badge.err { background: rgba(255,77,94,0.15); color: var(--err); }
-        .badge.run { background: rgba(255,106,61,0.15); color: var(--accent2); }
-
-        .timeline { list-style: none; display: flex; flex-direction: column; gap: 10px; }
-        .step {
-            display: flex; gap: 12px; align-items: flex-start;
-            background: rgba(255,255,255,0.02);
-            border: 1px solid var(--border);
-            border-left: 3px solid var(--muted);
-            border-radius: 10px;
-            padding: 11px 14px;
-            opacity: 0; transform: translateY(6px);
-            animation: rise .28s forwards;
-        }
-        @keyframes rise { to { opacity: 1; transform: none; } }
-        .step.db { border-left-color: var(--db); }
-        .step.error { border-left-color: var(--err); }
-        .step.step { border-left-color: var(--accent2); }
-        .step .ico { font-size: 16px; line-height: 1.4; }
-        .step .body { flex: 1; }
-        .step .label { font-size: 14px; }
-        .step .detail {
-            margin-top: 6px; font-family: 'Consolas', monospace; font-size: 12px;
-            color: var(--muted); white-space: pre-wrap; word-break: break-word;
-        }
-        .kind-tag { font-family: monospace; font-size: 10px; text-transform: uppercase; color: var(--muted); letter-spacing: 1px; }
-
-        .result-block { margin-top: 18px; }
-        .result-block h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 2px; color: var(--muted); margin-bottom: 8px; }
-        pre.json {
-            background: #05050a; border: 1px solid var(--border); border-radius: 10px;
-            padding: 14px; overflow-x: auto; font-family: 'Consolas', monospace; font-size: 13px;
-            color: #cdd6f4;
-        }
-        .errbox {
-            background: rgba(255,77,94,0.08); border: 1px solid rgba(255,77,94,0.4);
-            color: var(--err); border-radius: 10px; padding: 14px; font-family: monospace; font-size: 13px;
-        }
-        .spinner {
-            width: 34px; height: 34px; border-radius: 50%;
-            border: 3px solid rgba(255,45,74,0.2); border-top-color: var(--accent);
-            animation: spin .8s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .foot { margin-top: 26px; color: var(--muted); font-size: 12px; text-align: center; }
-        .foot a { color: var(--accent2); text-decoration: none; }
-        .dl-link { color: var(--accent2); text-decoration: none; font-weight: 700; border: 1px solid var(--border); padding: 8px 14px; border-radius: 8px; }
-        .dl-link:hover { border-color: var(--accent2); }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GOD HAND — Skills & Agents IA</title>
+<style>
+:root{--bg:#08080b;--panel:#121219;--panel2:#0e0e13;--border:#23232e;--text:#e7e7ee;
+ --muted:#8a8a99;--accent:#ff2d4a;--accent2:#ff6a3d;--ok:#35d07f;--err:#ff4d5e;--db:#6aa0ff;}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;color:var(--text);min-height:100vh;padding:26px 18px 70px;
+ background:radial-gradient(1100px 560px at 50% -10%,rgba(255,45,74,.12),transparent 60%),
+ radial-gradient(900px 500px at 90% 110%,rgba(255,106,61,.08),transparent 55%),var(--bg)}
+a{color:var(--accent2);text-decoration:none}
+.brand{text-align:center;margin-bottom:8px}
+.brand h1{font-size:clamp(28px,5vw,46px);letter-spacing:8px;font-weight:800;
+ background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;
+ text-shadow:0 0 40px rgba(255,45,74,.35)}
+.brand p{color:var(--muted);letter-spacing:3px;font-size:12px;text-transform:uppercase;margin-top:4px}
+.wrap{max-width:1150px;margin:0 auto}
+.bar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center;margin:22px 0 8px}
+.btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff;border:none;border-radius:11px;
+ padding:12px 20px;font-weight:700;cursor:pointer;font-size:14px;display:inline-flex;gap:8px;align-items:center;
+ box-shadow:0 8px 26px rgba(255,45,74,.3)}
+.btn:hover{transform:translateY(-2px)}
+.btn.ghost{background:transparent;border:1px solid var(--border);color:var(--muted);box-shadow:none}
+input,select{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:10px;
+ padding:11px 14px;font-size:14px;outline:none}
+input:focus,select:focus{border-color:var(--accent)}
+#search{min-width:260px}
+.count{text-align:center;color:var(--muted);font-size:13px;margin:6px 0 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px}
+.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--border);
+ border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:8px;transition:.15s}
+.card:hover{transform:translateY(-3px);border-color:rgba(255,45,74,.4);box-shadow:0 12px 34px rgba(0,0,0,.4)}
+.card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.card h3{font-size:17px}
+.badge{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap}
+.badge.on{background:rgba(53,208,127,.15);color:var(--ok)}
+.badge.off{background:rgba(255,77,94,.15);color:var(--err)}
+.badge.cat{background:rgba(106,160,255,.14);color:var(--db)}
+.card .desc{color:var(--muted);font-size:13px;flex:1;min-height:34px}
+.card .acts{display:flex;gap:8px;margin-top:6px}
+.card .acts .btn{padding:8px 12px;font-size:12px;box-shadow:none}
+.empty{text-align:center;color:var(--muted);padding:60px 0}
+.empty .glyph{font-size:52px;filter:drop-shadow(0 0 22px rgba(255,45,74,.5));margin-bottom:12px}
+.foot{margin-top:30px;text-align:center;color:var(--muted);font-size:12px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel);
+ border:1px solid var(--accent);border-radius:10px;padding:12px 18px;display:none;z-index:50}
+</style>
 </head>
 <body>
-    <div class="brand">
-        <h1>GOD&nbsp;HAND</h1>
-        <p>Console d'exécution des skills &amp; agents IA</p>
-    </div>
+<div class="wrap">
+  <div class="brand"><h1>GOD&nbsp;HAND</h1><p>Skills &amp; Agents IA · plateforme DataHub</p></div>
 
-    <div class="console">
-        <div class="controls">
-            <button class="upload-btn" id="btn">
-                <span>⬇</span><span>Télécharger un document</span>
-            </button>
-        </div>
+  <div class="bar">
+    <input id="search" type="text" placeholder="🔎 Rechercher un skill...">
+    <select id="cat"><option value="">Toutes catégories</option></select>
+    <select id="stat">
+      <option value="">Tous statuts</option>
+      <option value="active">Actifs</option>
+      <option value="inactive">Inactifs</option>
+    </select>
+    <button class="btn" onclick="dlApi()">⬇ Télécharger API.md</button>
+    <a class="btn ghost" href="/manage/">⚙️ Administration</a>
+  </div>
+  <div class="count" id="count"></div>
 
-        <div class="results" id="results">
-            <div class="placeholder">
-                <div class="glyph">📄</div>
-                <div>Cliquez sur <b>« Télécharger un document »</b> pour récupérer le fichier <b>API.md</b> :<br>
-                le contrat d'intégration à fournir à un modèle LLM (ChatGPT, Claude) ou à un skill<br>
-                pour qu'il sache utiliser les API de la plateforme.</div>
-            </div>
-        </div>
-    </div>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none">
+    <div class="glyph">🧩</div>
+    <div>Aucun skill disponible pour le moment.<br>Ajoute-en depuis l'<a href="/manage/">Administration</a>.</div>
+  </div>
 
-    <div class="foot">
-        <a href="/manage/">⚙️ Administration</a> &nbsp;·&nbsp;
-        Version synthétique pour skill : <a href="/skill.md">/skill.md</a>
-    </div>
+  <div class="foot">
+    Contrat d'intégration pour les IA : <a href="/api.md">API.md</a> ·
+    version synthétique : <a href="/skill.md">skill.md</a> ·
+    API : <code>/api/</code> · MCP : <code>/mcp</code>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
 
-    <script>
-        const $ = (id) => document.getElementById(id);
-        const results = $('results');
+<script>
+const $=(s)=>document.querySelector(s);
+let SKILLS=[];
+const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',2200);}
 
-        // Le bouton télécharge directement API.md (aucun explorateur de fichiers).
-        $('btn').addEventListener('click', () => {
-            const a = document.createElement('a');
-            a.href = '/api.md';
-            a.download = 'API.md';
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
+function dlApi(){const a=document.createElement('a');a.href='/api.md';a.download='API.md';document.body.appendChild(a);a.click();a.remove();toast('Téléchargement de API.md…');}
 
-            results.innerHTML =
-                '<div class="placeholder">'
-                + '<div class="glyph">✅</div>'
-                + '<div>Téléchargement de <b>API.md</b> lancé.<br>'
-                + "Transmettez ce fichier à votre modèle d'IA ou à votre skill : "
-                + 'il y trouvera toute la documentation des API de la plateforme.</div>'
-                + '<div style="margin-top:10px"><a class="dl-link" href="/api.md" download>Relancer le téléchargement</a></div>'
-                + '</div>';
-        });
-    </script>
+function copyLink(name){
+  const url=location.origin+'/api/skills/'+encodeURIComponent(name)+'/';
+  navigator.clipboard.writeText(url).then(()=>toast('Lien copié : '+url)).catch(()=>toast(url));
+}
+function details(name){
+  const s=SKILLS.find(x=>x.name===name);if(!s)return;
+  const msg=[
+    'Skill : '+s.name,
+    'Categorie : '+(s.category||'-'),
+    'Source : '+s.source,
+    'Statut : '+(s.is_active?'actif':'inactif'),
+    '',
+    (s.description||'(pas de description)'),
+    '',
+    'Utilisation : GET /api/skills/'+s.name+'/ puis suivre les instructions.'
+  ].join('\n');
+  alert(msg);
+}
+
+function render(){
+  const q=$('#search').value.toLowerCase().trim();
+  const cat=$('#cat').value, st=$('#stat').value;
+  let list=SKILLS.filter(s=>{
+    if(q && !((s.name+' '+(s.description||'')).toLowerCase().includes(q)))return false;
+    if(cat && (s.category||'')!==cat)return false;
+    if(st==='active' && !s.is_active)return false;
+    if(st==='inactive' && s.is_active)return false;
+    return true;
+  });
+  $('#count').textContent=list.length+' skill'+(list.length>1?'s':'')+' sur '+SKILLS.length;
+  $('#empty').style.display=SKILLS.length?'none':'block';
+  $('#grid').innerHTML=list.map(s=>`
+    <div class="card">
+      <div class="top"><h3>${esc(s.name)}</h3>
+        <span class="badge ${s.is_active?'on':'off'}">${s.is_active?'actif':'inactif'}</span></div>
+      <div><span class="badge cat">${esc(s.category||s.source)}</span></div>
+      <div class="desc">${esc(s.description||'Pas de description.')}</div>
+      <div class="acts">
+        <button class="btn ghost" onclick="details('${esc(s.name)}')">Détails</button>
+        <button class="btn" onclick="copyLink('${esc(s.name)}')">Copier le lien</button>
+      </div>
+    </div>`).join('');
+}
+
+function buildCats(){
+  const cats=[...new Set(SKILLS.map(s=>s.category).filter(Boolean))].sort();
+  $('#cat').innerHTML='<option value="">Toutes catégories</option>'+cats.map(c=>`<option>${esc(c)}</option>`).join('');
+}
+
+$('#search').addEventListener('input',render);
+$('#cat').addEventListener('change',render);
+$('#stat').addEventListener('change',render);
+
+fetch('/public/skills').then(r=>r.json()).then(d=>{SKILLS=d.skills||[];buildCats();render();})
+  .catch(()=>{$('#empty').style.display='block';});
+</script>
 </body>
 </html>

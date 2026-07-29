@@ -21,14 +21,19 @@ urlpatterns = [
     path('a/<str:slug>', render_artifact, name='artifact-render'),
     path('a/<str:slug>/', render_artifact),
 
+    # Catalogue public des skills (page d'accueil dynamique)
+    path('public/skills', mng.public_skills, name='public-skills'),
+
     # Tableau de bord d'administration (GOD HAND) — réservé au staff connecté
     path('manage/', mng.dashboard, name='dashboard'),
+    path('manage/logout/', mng.logout_view, name='manage-logout'),
     path('manage/api/overview', mng.overview),
     path('manage/api/agents/create', mng.agent_create),
     path('manage/api/agents/<int:agent_id>/update', mng.agent_update),
     path('manage/api/agents/<int:agent_id>/delete', mng.agent_delete),
     path('manage/api/skills', mng.skills_list),
     path('manage/api/skills/create', mng.skill_create),
+    path('manage/api/skills/<str:name>/toggle', mng.skill_toggle),
     path('manage/api/skills/<str:name>/delete', mng.skill_delete),
     # Console d'exécution (interface GOD HAND)
     path('console/skills', console_skills, name='console-skills'),

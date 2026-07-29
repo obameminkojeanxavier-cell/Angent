@@ -19,8 +19,8 @@ class ArtifactAdmin(admin.ModelAdmin):
 
 @admin.register(Skill)
 class SkillAdmin(admin.ModelAdmin):
-    list_display = ('name', 'category', 'description', 'is_active', 'updated_at')
-    list_filter = ('is_active', 'category')
+    list_display = ('name', 'kind', 'is_orchestrator', 'category', 'is_active', 'updated_at')
+    list_filter = ('is_active', 'is_orchestrator', 'category')
     search_fields = ('name', 'description', 'instructions')
     readonly_fields = ('created_at', 'updated_at')
     inlines = [SkillFileInline]

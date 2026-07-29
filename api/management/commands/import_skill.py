@@ -25,6 +25,9 @@ class Command(BaseCommand):
         parser.add_argument('--path', required=True, help="Dossier du skill, ou fichier unique (.md)")
         parser.add_argument('--description', default='')
         parser.add_argument('--category', default='')
+        parser.add_argument('--kind', default='', help="Type de capacité (ex: fs.write) ; vide = instructionnel")
+        parser.add_argument('--orchestrator', action='store_true',
+                            help="Marque ce skill comme ORCHESTRATEUR (point d'entrée / verrou)")
         parser.add_argument('--replace', action='store_true',
                             help="Supprime les fichiers existants du skill avant import")
 
@@ -35,7 +38,11 @@ class Command(BaseCommand):
 
         skill, created = Skill.objects.update_or_create(
             name=opts['name'],
-            defaults={'description': opts['description'], 'category': opts['category'], 'is_active': True},
+            defaults={
+                'description': opts['description'], 'category': opts['category'],
+                'kind': ('orchestrateur' if opts['orchestrator'] else opts['kind']),
+                'is_orchestrator': opts['orchestrator'], 'is_active': True,
+            },
         )
         if opts['replace']:
             skill.files.all().delete()

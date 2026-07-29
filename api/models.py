@@ -83,6 +83,11 @@ class Skill(models.Model):
     name = models.CharField(max_length=100, unique=True)
     description = models.CharField(max_length=255, blank=True, default='')
     category = models.CharField(max_length=100, blank=True, default='')
+    # 'orchestrateur' pour le skill principal, sinon type de capacité du
+    # sous-skill (ex: fs.write, db.insert…) ou vide (instructionnel).
+    kind = models.CharField(max_length=50, blank=True, default='')
+    # True = skill orchestrateur (point d'entrée / verrou). Un seul suffit.
+    is_orchestrator = models.BooleanField(default=False)
     # Instructions détaillées : ce que l'agent doit faire, quelles actions
     # appeler, dans quel ordre, avec quels paramètres.
     instructions = models.TextField(blank=True, default='')

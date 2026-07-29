@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError
 from django.conf import settings
 
 from .authentication import AgentTokenAuthentication
-from .permissions import ReadAccess, HasScope
+from .permissions import ReadAccess, HasScope, OrchestratorGate
 from .db_operations import DatabaseOperations
 from .audit import audit
 from .tokens import (
@@ -24,14 +24,16 @@ from .models import SkillTask, AuditLog, Artifact
 class ReadView(APIView):
     """Lecture : token optionnel (selon REQUIRE_AUTH_FOR_READ) + scope data:read si authentifié."""
     authentication_classes = [AgentTokenAuthentication]
-    permission_classes = [ReadAccess]
+    permission_classes = [ReadAccess, OrchestratorGate]
+    orchestrator_exempt = False
 
 
 class ScopedView(APIView):
-    """Opération protégée : token obligatoire + `required_scope`."""
+    """Opération protégée : token obligatoire + `required_scope` + verrou orchestrateur."""
     authentication_classes = [AgentTokenAuthentication]
-    permission_classes = [HasScope]
+    permission_classes = [HasScope, OrchestratorGate]
     required_scope = None
+    orchestrator_exempt = False
 
 
 def _check_table(request, table):
@@ -264,14 +266,19 @@ class DeleteView(ScopedView):
 
 class SkillsListView(ScopedView):
     required_scope = SCOPE_SKILLS
+    orchestrator_exempt = True  # catalogue toujours consultable
 
     def get(self, request):
-        return Response({'skills': skills_registry.list_skills()}, status=status.HTTP_200_OK)
+        return Response({
+            'skills': skills_registry.list_skills(),
+            'orchestrator_active': skills_registry.orchestrator_active(),
+        }, status=status.HTTP_200_OK)
 
 
 class SkillDefinitionView(ScopedView):
     """Définition complète d'un skill : l'agent la lit pour savoir l'utiliser."""
     required_scope = SCOPE_SKILLS
+    orchestrator_exempt = True
 
     def get(self, request, name):
         definition = skills_registry.get_definition(name)
@@ -284,6 +291,7 @@ class SkillDefinitionView(ScopedView):
 class SkillFileView(ScopedView):
     """Lire un fichier d'un skill (skill = dossier de fichiers)."""
     required_scope = SCOPE_SKILLS
+    orchestrator_exempt = True
 
     def get(self, request, name, filepath):
         f = skills_registry.get_skill_file(name, filepath)
