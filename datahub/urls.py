@@ -33,6 +33,8 @@ urlpatterns = [
     path('manage/api/agents/<int:agent_id>/delete', mng.agent_delete),
     path('manage/api/skills', mng.skills_list),
     path('manage/api/skills/create', mng.skill_create),
+    path('manage/api/skills/import', mng.skill_import),
+    path('manage/api/skills/<str:name>/detail', mng.skill_detail),
     path('manage/api/skills/<str:name>/toggle', mng.skill_toggle),
     path('manage/api/skills/<str:name>/delete', mng.skill_delete),
     # Console d'exécution (interface GOD HAND)

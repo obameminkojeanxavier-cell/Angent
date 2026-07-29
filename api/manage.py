@@ -228,6 +228,111 @@ def skill_create(request):
     return JsonResponse({'ok': True, 'name': name})
 
 
+_CT_BY_EXT = {
+    '.md': 'text/markdown', '.markdown': 'text/markdown', '.html': 'text/html', '.htm': 'text/html',
+    '.txt': 'text/plain', '.json': 'application/json', '.csv': 'text/csv',
+    '.py': 'text/x-python', '.js': 'text/javascript', '.css': 'text/css',
+    '.svg': 'image/svg+xml', '.yaml': 'text/yaml', '.yml': 'text/yaml',
+}
+_MAX_IMPORT_FILE = 1_000_000
+
+
+def _clean_zip_path(p):
+    p = p.replace('\\', '/').lstrip('/')
+    parts = [x for x in p.split('/') if x not in ('', '.', '..')]
+    return '/'.join(parts)
+
+
+@require_POST
+def skill_import(request):
+    """Importe un skill depuis un fichier .md OU un .zip (dossier complet)."""
+    if not _is_staff(request):
+        return _forbidden()
+    import io
+    import os
+    import zipfile
+
+    up = request.FILES.get('file')
+    if not up:
+        return JsonResponse({'error': 'Aucun fichier fourni'}, status=400)
+    name = (request.POST.get('name') or '').strip()
+    is_orch = str(request.POST.get('is_orchestrator', '')).lower() in ('1', 'true', 'on', 'yes')
+    description = request.POST.get('description', '')
+    category = request.POST.get('category', '')
+    fname = up.name or 'skill'
+
+    files = []  # (path, content)
+    if fname.lower().endswith('.zip'):
+        try:
+            z = zipfile.ZipFile(io.BytesIO(up.read()))
+        except zipfile.BadZipFile:
+            return JsonResponse({'error': 'Fichier ZIP invalide'}, status=400)
+        for member in z.namelist():
+            if member.endswith('/'):
+                continue
+            cp = _clean_zip_path(member)
+            if not cp:
+                continue
+            try:
+                data = z.read(member)
+                content = data.decode('utf-8')
+            except Exception:
+                continue  # binaire / illisible : ignoré
+            if len(content.encode('utf-8')) > _MAX_IMPORT_FILE:
+                continue
+            files.append((cp, content))
+        # Retire un dossier racine commun (ex: "mon_skill/SKILL.md" -> "SKILL.md")
+        tops = {p.split('/')[0] for p, _ in files if '/' in p}
+        if files and len(tops) == 1 and all('/' in p for p, _ in files):
+            root = tops.pop()
+            files = [(p[len(root) + 1:], c) for p, c in files]
+        if not name:
+            name = _clean_zip_path(fname)[:-4] or 'skill'
+    else:
+        content = up.read().decode('utf-8', errors='replace')
+        path = 'SKILL.md' if fname.lower().endswith(('.md', '.markdown')) else fname
+        files = [(path, content)]
+        if not name:
+            name = fname.rsplit('.', 1)[0]
+
+    if not name:
+        return JsonResponse({'error': 'Nom requis'}, status=400)
+    if not files:
+        return JsonResponse({'error': 'Aucun fichier texte exploitable dans l\'archive'}, status=400)
+
+    skill, _ = Skill.objects.update_or_create(
+        name=name,
+        defaults={
+            'description': description, 'category': category,
+            'kind': ('orchestrateur' if is_orch else category),
+            'is_orchestrator': is_orch, 'is_active': True,
+        },
+    )
+    skill.files.all().delete()
+    for p, c in files:
+        ext = os.path.splitext(p)[1].lower()
+        SkillFile.objects.create(skill=skill, path=p, content=c,
+                                 content_type=_CT_BY_EXT.get(ext, 'text/plain'))
+    return JsonResponse({'ok': True, 'name': name, 'is_orchestrator': is_orch,
+                         'files': [p for p, _ in files]})
+
+
+def skill_detail(request, name):
+    if not _is_staff(request):
+        return _forbidden()
+    try:
+        s = Skill.objects.get(name=name)
+    except Skill.DoesNotExist:
+        return JsonResponse({'error': 'Skill introuvable'}, status=404)
+    return JsonResponse({
+        'name': s.name, 'description': s.description, 'category': s.category,
+        'kind': s.kind, 'is_orchestrator': s.is_orchestrator, 'is_active': s.is_active,
+        'instructions': s.entry_instructions,
+        'files': [{'path': f.path, 'content_type': f.content_type, 'content': f.content}
+                  for f in s.files.all()],
+    })
+
+
 @require_POST
 def skill_toggle(request, name):
     if not _is_staff(request):

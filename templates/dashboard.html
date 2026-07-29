@@ -60,7 +60,9 @@ textarea{min-height:90px;resize:vertical}
 .tokenbox{background:#05050a;border:1px dashed var(--accent2);border-radius:8px;padding:10px;margin-top:8px;
  font-family:'Consolas',monospace;font-size:13px;word-break:break-all;color:var(--accent2)}
 .filerow{display:grid;grid-template-columns:1fr 2fr auto;gap:8px;margin-bottom:8px}
-h2.sec{margin:18px 0 6px;font-size:16px}
+h2.sec,h3.sec{margin:14px 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+.code{background:#05050a;border:1px solid var(--border);border-radius:8px;padding:10px;overflow:auto;
+ white-space:pre-wrap;word-break:break-word;font-family:'Consolas',monospace;font-size:12px;color:#cdd6f4;max-height:320px}
 </style>
 </head>
 <body>
@@ -101,22 +103,53 @@ h2.sec{margin:18px 0 6px;font-size:16px}
 
   <!-- SKILLS -->
   <div class="view" id="v-skills">
-    <h2 class="sec">Importer / créer un skill</h2>
-    <div class="agent">
+    <div id="orch-banner"></div>
+    <div class="grid" style="grid-template-columns:1fr 1fr">
+      <div class="card">
+        <h3>🧠 Skill orchestrateur</h3>
+        <div class="small">Le skill principal : point d'entrée et verrou. Sans lui, les agents n'ont aucun accès. Un seul actif.</div>
+        <button class="btn" style="margin-top:12px" onclick="pickImport(true)">⬆ Importer / modifier l'orchestrateur</button>
+      </div>
+      <div class="card">
+        <h3>🧩 Skills métiers (compétences)</h3>
+        <div class="small">Capacités supplémentaires. Importe un fichier <b>.md</b> ou un dossier zippé <b>.zip</b>.</div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" onclick="pickImport(false)">⬆ Importer un skill métier</button>
+          <button class="btn ghost" onclick="toggleManual()">Créer manuellement</button>
+        </div>
+      </div>
+    </div>
+
+    <input type="file" id="imp-file" accept=".md,.markdown,.zip,.txt,.html,.json,.csv" style="display:none">
+
+    <div id="manual" class="agent" style="display:none">
       <div class="field"><label>Nom</label><input type="text" id="ns-name" placeholder="ex: rapport.html"></div>
       <div class="field"><label>Description</label><input type="text" id="ns-desc"></div>
       <div class="field"><label>Catégorie</label><input type="text" id="ns-cat" placeholder="fichier, rapport..."></div>
       <div class="field"><label><input type="checkbox" id="ns-orch" style="width:auto;margin-right:8px">
-        Skill ORCHESTRATEUR (point d'entrée / verrou — n'en garder qu'un seul actif)</label></div>
-      <div class="field"><label>Instructions principales (SKILL.md) — ce que l'agent doit faire</label>
-        <textarea id="ns-instr" placeholder="Décris précisément les étapes, les actions API à appeler..."></textarea></div>
-      <div class="field"><label>Fichiers du skill (dossier) — optionnel</label>
-        <div id="ns-files"></div>
+        Ce skill est l'ORCHESTRATEUR</label></div>
+      <div class="field"><label>Instructions (SKILL.md)</label>
+        <textarea id="ns-instr" placeholder="Étapes, actions API à appeler..."></textarea></div>
+      <div class="field"><label>Fichiers (optionnel)</label><div id="ns-files"></div>
         <button class="btn ghost" onclick="addFileRow()">+ Ajouter un fichier</button></div>
       <button class="btn" onclick="createSkill()">Enregistrer le skill</button>
     </div>
-    <h2 class="sec">Skills en base</h2>
-    <div id="skills"></div>
+
+    <h2 class="sec">Orchestrateur</h2>
+    <div id="skills-orch"></div>
+    <h2 class="sec">Skills métiers</h2>
+    <div id="skills-biz"></div>
+  </div>
+
+  <!-- Modal consultation -->
+  <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:60;padding:30px;overflow:auto">
+    <div style="max-width:820px;margin:0 auto;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h2 class="sec" id="m-title" style="margin:0"></h2>
+        <button class="btn ghost" onclick="$('#modal').style.display='none'">Fermer ✕</button>
+      </div>
+      <div id="m-body" style="margin-top:12px"></div>
+    </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -204,6 +237,12 @@ async function createAgent(){
 }
 
 /* SKILLS */
+async function apiForm(path,fd){
+  const r=await fetch(path,{method:'POST',headers:{'X-CSRFToken':getCookie('csrftoken')},body:fd});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d;
+}
+function toggleManual(){const m=$('#manual');m.style.display=(m.style.display==='none'||!m.style.display)?'block':'none';}
 function addFileRow(path='',content=''){
   const div=document.createElement('div');div.className='filerow';
   div.innerHTML=`<input type="text" placeholder="chemin (ex: templates/x.html)" value="${esc(path)}">
@@ -211,25 +250,56 @@ function addFileRow(path='',content=''){
     <button class="btn ghost" onclick="this.parentElement.remove()">✕</button>`;
   $('#ns-files').appendChild(div);
 }
+
+let IMP_ORCH=false;
+function pickImport(isOrch){IMP_ORCH=isOrch;const f=$('#imp-file');f.value='';f.click();}
+$('#imp-file').addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;
+  const def=f.name.replace(/\.(md|markdown|zip|txt|html|json|csv)$/i,'');
+  const name=prompt('Nom du skill :', IMP_ORCH?'orchestrateur':def);
+  if(!name){return;}
+  const fd=new FormData();fd.append('file',f);fd.append('name',name);fd.append('is_orchestrator',IMP_ORCH?'true':'false');
+  try{const d=await apiForm('/manage/api/skills/import',fd);
+    toast('Importé ✓ — '+(d.files||[]).length+' fichier(s)');loadSkills();loadOverview();}
+  catch(err){toast(err.message,false)}
+});
+
+function skillCard(s){
+  return `<div class="agent"><div class="row">
+    <div class="name">${esc(s.name)} ${s.is_orchestrator?'<span class="badge" style="background:rgba(255,106,61,.18);color:var(--accent2)">ORCHESTRATEUR</span>':''} <span class="badge ${s.is_active?'on':'off'}">${s.is_active?'actif':'inactif'}</span> <span class="small">${esc(s.kind||s.category||'')}</span></div>
+    <div>
+      <button class="btn ghost" onclick="consulter('${esc(s.name)}')">Consulter</button>
+      <button class="btn ghost" onclick="toggleSkill('${esc(s.name)}')">${s.is_active?'Désactiver':'Activer'}</button>
+      <button class="btn danger" onclick="delSkill('${esc(s.name)}')">Supprimer</button>
+    </div></div>
+    <div class="small">${esc(s.description||'')}</div>
+    <div class="small" style="margin-top:6px">Fichiers : ${(s.files||[]).map(f=>esc(f.path)).join(', ')||'—'}</div>
+  </div>`;
+}
 async function loadSkills(){
   const d=await api('/manage/api/skills');
-  const banner = d.orchestrator_active
-    ? '<div class="small" style="color:var(--ok)">✓ Orchestrateur actif — les agents peuvent agir.</div>'
-    : '<div class="agent" style="border-color:var(--err)"><b style="color:var(--err)">⚠️ Aucun orchestrateur actif</b><div class="small">Tant qu\'aucun skill « orchestrateur » n\'est actif, les agents n\'ont AUCUN accès au serveur/base. Crée-en un (coche « Skill ORCHESTRATEUR » ci-dessus) ou importe-le.</div></div>';
-  $('#skills').innerHTML=banner+d.skills.map(s=>`
-    <div class="agent"><div class="row">
-      <div class="name">${esc(s.name)} ${s.is_orchestrator?'<span class="badge" style="background:rgba(255,106,61,.18);color:var(--accent2)">ORCHESTRATEUR</span>':''} <span class="badge ${s.is_active?'on':'off'}">${s.is_active?'actif':'inactif'}</span> <span class="small">${esc(s.kind||s.category||'')}</span></div>
-      <div>
-        <button class="btn ghost" onclick="toggleSkill('${esc(s.name)}')">${s.is_active?'Désactiver':'Activer'}</button>
-        <button class="btn danger" onclick="delSkill('${esc(s.name)}')">Supprimer</button>
-      </div></div>
-      <div class="small">${esc(s.description||'')}</div>
-      <div class="small" style="margin-top:6px">Fichiers : ${s.files.map(f=>esc(f.path)).join(', ')||'—'}</div>
-    </div>`).join('')||'<p class="small">Aucun skill en base. Utilise le formulaire ci-dessus pour en créer un.</p>';
+  $('#orch-banner').innerHTML = d.orchestrator_active
+    ? '<div class="agent" style="border-color:var(--ok)"><b style="color:var(--ok)">✓ Orchestrateur actif</b> <span class="small">— les agents peuvent agir.</span></div>'
+    : '<div class="agent" style="border-color:var(--err)"><b style="color:var(--err)">⚠️ Aucun orchestrateur actif</b><div class="small">Les agents n\'ont AUCUN accès tant qu\'un orchestrateur n\'est pas importé et actif.</div></div>';
+  const orch=d.skills.filter(s=>s.is_orchestrator);
+  const biz=d.skills.filter(s=>!s.is_orchestrator);
+  $('#skills-orch').innerHTML=orch.map(skillCard).join('')||'<p class="small">Aucun orchestrateur importé. Utilise « Importer / modifier l\'orchestrateur ».</p>';
+  $('#skills-biz').innerHTML=biz.map(skillCard).join('')||'<p class="small">Aucun skill métier importé.</p>';
 }
 async function toggleSkill(name){
   try{await api('/manage/api/skills/'+encodeURIComponent(name)+'/toggle','POST',{});toast('Statut mis à jour ✓');loadSkills();loadOverview();}
   catch(e){toast(e.message,false)}
+}
+async function consulter(name){
+  try{const s=await api('/manage/api/skills/'+encodeURIComponent(name)+'/detail');
+    $('#m-title').textContent=s.name+(s.is_orchestrator?' — orchestrateur':'');
+    $('#m-body').innerHTML=
+      '<div class="small">'+esc(s.description||'')+'</div>'+
+      '<h3 class="sec">Instructions (SKILL.md)</h3><pre class="code">'+esc(s.instructions||'—')+'</pre>'+
+      '<h3 class="sec">Fichiers</h3>'+
+      (s.files.length? s.files.map(f=>'<div style="margin-bottom:10px"><b>'+esc(f.path)+'</b> <span class="small">('+esc(f.content_type)+')</span><pre class="code">'+esc((f.content||'').slice(0,4000))+'</pre></div>').join('') : '<p class="small">—</p>');
+    $('#modal').style.display='block';
+  }catch(e){toast(e.message,false)}
 }
 async function createSkill(){
   const name=$('#ns-name').value.trim();if(!name)return toast('Nom requis',false);
