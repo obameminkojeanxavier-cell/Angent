@@ -95,7 +95,7 @@ def get_definition(name):
         'description': d.description,
         'category': d.category,
         'source': 'db',
-        'executable': False,
+        'executable': True,
         # Instructions principales = contenu de SKILL.md si présent.
         'instructions': d.entry_instructions,
         'input_example': d.input_example,

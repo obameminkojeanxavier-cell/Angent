@@ -5,7 +5,6 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, NotFound
 from django.core.exceptions import ValidationError
-
 from django.conf import settings
 
 from .authentication import AgentTokenAuthentication
@@ -308,12 +307,84 @@ class SkillRunView(ReadView):
 
     def post(self, request, name):
         skill = skills_registry.get_skill(name)
+        client = request.user
+        try:
+            params = _coerce_obj(request.data.get('params'), 'params')
+        except ValidationError as e:
+            return _bad(e)
+        
         if not skill:
-            # Skill « base » (instructionnel) : on renvoie ses instructions pour
-            # que l'agent les suive via les actions CRUD. Sinon 404.
+            # Skill de base de données : essayer de l'exécuter comme template
             definition = skills_registry.get_definition(name)
             if not definition:
                 raise NotFound(f"Skill inconnu : {name}")
+            
+            # Si le skill est de la base de données, essayer de générer un artefact
+            if definition.get('source') == 'db':
+                task = SkillTask.objects.create(
+                    client=client if getattr(client, 'pk', None) else None,
+                    skill=name, params=params, status='running',
+                )
+                try:
+                    # Générer le contenu en utilisant les fichiers du skill
+                    from .models import Skill, SkillFile
+                    skill_obj = Skill.objects.get(name=name, is_active=True)
+                    
+                    # Chercher un fichier template principal (ex: template.html, template.md)
+                    template_file = skill_obj.files.filter(
+                        path__icontains='template'
+                    ).first()
+                    
+                    if not template_file:
+                        # Sinon, prendre le premier fichier non-MD
+                        template_file = skill_obj.files.filter(
+                            path__iendswith='.html'
+                        ).first()
+                    
+                    if not template_file:
+                        # Sinon, prendre SKILL.md
+                        template_file = skill_obj.files.filter(
+                            path__iexact='SKILL.md'
+                        ).first()
+                    
+                    if template_file:
+                        content = template_file.content
+                        # Remplacer les paramètres dans le template
+                        for key, value in params.items():
+                            content = content.replace(f'{{{key}}}', str(value))
+                        
+                        # Créer un artefact avec le contenu généré
+                        from .models import Artifact
+                        artifact = Artifact.objects.create(
+                            name=f"{name}_output",
+                            content_type=template_file.content_type,
+                            content=content,
+                            client=client if getattr(client, 'pk', None) else None,
+                        )
+                        
+                        # Générer l'URL publique
+                        base = getattr(settings, 'OPENAPI_BASE_URL', '') or f"{request.scheme}://{request.get_host()}"
+                        url = f"{base}/a/{artifact.slug}"
+                        
+                        task.status = 'succeeded'
+                        task.result = {
+                            'artifact': artifact.slug,
+                            'url': url,
+                            'content_type': artifact.content_type,
+                        }
+                        audit(request, 'skill.run', name, detail={'task': str(task.id)})
+                    else:
+                        task.status = 'failed'
+                        task.error = "Aucun fichier template trouvé dans le skill"
+                        audit(request, 'skill.run', name, 'error', {'task': str(task.id), 'error': task.error})
+                except Exception as e:
+                    task.status = 'failed'
+                    task.error = str(e)
+                    audit(request, 'skill.run', name, 'error', {'task': str(task.id), 'error': str(e)})
+                task.save()
+                return Response(_task_dict(task), status=status.HTTP_200_OK)
+            
+            # Skill instructionnel : renvoyer les instructions
             audit(request, 'skill.read', name)
             return Response({
                 'skill': name,
@@ -324,11 +395,6 @@ class SkillRunView(ReadView):
                         "appelant les actions (selectData, insertData, updateData, ...).",
             }, status=status.HTTP_200_OK)
 
-        client = request.user
-        try:
-            params = _coerce_obj(request.data.get('params'), 'params')
-        except ValidationError as e:
-            return _bad(e)
         task = SkillTask.objects.create(
             client=client if getattr(client, 'pk', None) else None,
             skill=name, params=params, status='running',
