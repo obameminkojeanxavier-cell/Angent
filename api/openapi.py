@@ -217,7 +217,6 @@ def build_schema(base_url):
                         {"name": "name", "in": "path", "required": True,
                          "schema": {"type": "string"}, "description": "Nom du skill."}
                     ],
-                    "security": [{"bearerAuth": []}],
                     "responses": _ok("Définition du skill (instructions + fichiers)"),
                 }
             },
@@ -232,14 +231,12 @@ def build_schema(base_url):
                         {"name": "filepath", "in": "path", "required": True,
                          "schema": {"type": "string"}, "description": "Chemin du fichier dans le skill (ex: SKILL.md, templates/x.html)."},
                     ],
-                    "security": [{"bearerAuth": []}],
                     "responses": _ok("Contenu du fichier"),
                 }
             },
             "/api/skills/{name}/run/": {
                 "post": {
                     "operationId": "runSkill",
-                    "security": [{"bearerAuth": []}],
                     "summary": "Déclencher un skill et récupérer la tâche (résultat inclus).",
                     "parameters": [
                         {"name": "name", "in": "path", "required": True,
@@ -268,7 +265,6 @@ def build_schema(base_url):
                     "operationId": "createArtifact",
                     "summary": "Publier un fichier/contenu produit (HTML, texte, CSV, JSON, Markdown, SVG) "
                                "et obtenir une URL publique à donner à l'utilisateur.",
-                    "security": [{"bearerAuth": []}],
                     "requestBody": _body(_json_obj(
                         properties={
                             "content": {"type": "string", "description": "Le contenu complet du fichier (ex: le code HTML)."},

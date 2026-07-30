@@ -279,9 +279,8 @@ class SkillsListView(ReadView):
         }, status=status.HTTP_200_OK)
 
 
-class SkillDefinitionView(ScopedView):
+class SkillDefinitionView(ReadView):
     """Définition complète d'un skill : l'agent la lit pour savoir l'utiliser."""
-    required_scope = SCOPE_SKILLS
     orchestrator_exempt = True
 
     def get(self, request, name):
@@ -292,9 +291,8 @@ class SkillDefinitionView(ScopedView):
         return Response(definition, status=status.HTTP_200_OK)
 
 
-class SkillFileView(ScopedView):
+class SkillFileView(ReadView):
     """Lire un fichier d'un skill (skill = dossier de fichiers)."""
-    required_scope = SCOPE_SKILLS
     orchestrator_exempt = True
 
     def get(self, request, name, filepath):
@@ -305,8 +303,8 @@ class SkillFileView(ScopedView):
         return Response(f, status=status.HTTP_200_OK)
 
 
-class SkillRunView(ScopedView):
-    required_scope = SCOPE_SKILLS
+class SkillRunView(ReadView):
+    orchestrator_exempt = True
 
     def post(self, request, name):
         skill = skills_registry.get_skill(name)
@@ -401,9 +399,9 @@ def _artifact_url(request, slug):
     return f"{base}/a/{slug}"
 
 
-class ArtifactCreateView(ScopedView):
+class ArtifactCreateView(ReadView):
     """Créer un artefact (contenu produit par l'agent). Renvoie son URL publique."""
-    required_scope = SCOPE_DATA_WRITE
+    orchestrator_exempt = True
 
     def post(self, request):
         name = request.data.get('name', '')
