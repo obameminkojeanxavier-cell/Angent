@@ -258,10 +258,30 @@ def _needs_table(name, args, client):
 
 
 def _get_active_orchestrator():
-    """Récupère le skill orchestrateur actif."""
+    """Récupère le skill orchestrateur actif via l'endpoint dédié."""
     try:
-        return Skill.objects.filter(is_orchestrator=True, is_active=True).first()
+        from django.test import Client
+        client = Client()
+        response = client.get('/api/skills/orchestrator/active/')
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('orchestrator'):
+                return data['orchestrator']
+        return None
     except Exception:
+        # Fallback : requête directe au modèle si l'endpoint échoue
+        try:
+            skill = Skill.objects.filter(is_orchestrator=True, is_active=True).first()
+            if skill:
+                return {
+                    'name': skill.name,
+                    'description': skill.description,
+                    'category': skill.category,
+                    'kind': skill.kind,
+                    'is_active': skill.is_active,
+                }
+        except Exception:
+            pass
         return None
 
 

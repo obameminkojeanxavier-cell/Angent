@@ -218,6 +218,38 @@ def skills_list(request):
     return JsonResponse({'skills': data, 'orchestrator_active': skills_registry.orchestrator_active()})
 
 
+def orchestrator_active(request):
+    """Endpoint dédié pour récupérer l'orchestrateur actif.
+    
+    Retourne les détails de l'orchestrateur actif ou null si aucun n'est disponible.
+    Accessible sans authentification staff (pour les agents).
+    """
+    try:
+        orchestrator = Skill.objects.filter(is_orchestrator=True, is_active=True).first()
+        if not orchestrator:
+            return JsonResponse({'orchestrator': None, 'message': 'Aucun orchestrateur actif'})
+        
+        return JsonResponse({
+            'orchestrator': {
+                'name': orchestrator.name,
+                'description': orchestrator.description,
+                'category': orchestrator.category,
+                'kind': orchestrator.kind,
+                'is_active': orchestrator.is_active,
+                'updated_at': orchestrator.updated_at.isoformat() if orchestrator.updated_at else None,
+                'origin': 'imported',  # Peut être étendu pour 'default' plus tard
+                'files': [
+                    {'path': f.path, 'content_type': f.content_type, 'size': len(f.content or '')}
+                    for f in orchestrator.files.all()
+                ],
+                'instructions': orchestrator.entry_instructions,
+            },
+            'message': 'Orchestrateur actif disponible'
+        })
+    except Exception as e:
+        return JsonResponse({'orchestrator': None, 'message': f'Erreur: {str(e)}'}, status=500)
+
+
 @require_POST
 def skill_create(request):
     if not _is_staff(request):

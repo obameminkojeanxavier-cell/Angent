@@ -38,6 +38,8 @@ urlpatterns = [
     path('manage/api/skills/<str:name>/detail', mng.skill_detail),
     path('manage/api/skills/<str:name>/toggle', mng.skill_toggle),
     path('manage/api/skills/<str:name>/delete', mng.skill_delete),
+    # Endpoint dédié pour récupérer l'orchestrateur actif (accessible aux agents)
+    path('api/skills/orchestrator/active/', mng.orchestrator_active, name='orchestrator-active'),
     # Console d'exécution (interface GOD HAND)
     path('console/skills', console_skills, name='console-skills'),
     path('console/run', console_run, name='console-run'),

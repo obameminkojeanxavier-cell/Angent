@@ -27,6 +27,7 @@ class OrchestrationMiddleware:
             '/openapi.json',
             '/a/',
             '/static/',
+            '/api/skills/orchestrator/',  # Endpoint dédié exempté
         ])
     
     def __call__(self, request):
@@ -50,9 +51,10 @@ class OrchestrationMiddleware:
         return self.get_response(request)
     
     def _orchestrator_active(self):
-        """Vérifie si un skill orchestrateur actif existe."""
+        """Vérifie si un skill orchestrateur actif existe via l'endpoint dédié."""
         try:
             from .models import Skill
+            # Utilisation directe du modèle pour éviter les appels récursifs dans le middleware
             return Skill.objects.filter(is_orchestrator=True, is_active=True).exists()
         except Exception:
             # En cas d'erreur (base non migrée), on refuse l'accès par sécurité
