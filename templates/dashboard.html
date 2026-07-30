@@ -319,14 +319,23 @@ async function importOrch(){
   fd.append('name',name);
   fd.append('description',$('#orch-desc').value);
   fd.append('is_orchestrator','true');
+  
+  // État de chargement
+  $('#orch-status').innerHTML='<b style="color:var(--accent2)">⏳ Import en cours...</b><div class="small">Veuillez patienter</div>';
+  $('#orch-status').style.display='block';
+  
   try{
     const d=await apiForm('/manage/api/skills/import',fd);
-    $('#orch-status').innerHTML='<b style="color:var(--ok)">✓ Importé avec succès</b><div class="small">'+(d.files||[]).length+' fichier(s)</div>';
+    $('#orch-status').innerHTML='<b style="color:var(--ok)">✓ Importé avec succès</b><div class="small">'+(d.message||'')+'</div>';
     $('#orch-status').style.display='block';
     $('#orch-name').value='';$('#orch-desc').value='';$('#orch-file').value='';
     toast('Orchestrateur importé ✓');
     loadSkills();loadOverview();
-  }catch(err){toast(err.message,false)}
+  }catch(err){
+    $('#orch-status').innerHTML='<b style="color:var(--err)">✗ Erreur</b><div class="small">'+esc(err.message)+'</div>';
+    $('#orch-status').style.display='block';
+    toast(err.message,false);
+  }
 }
 
 // Importer une compétence
@@ -340,14 +349,23 @@ async function importSkill(){
   fd.append('description',$('#skill-desc').value);
   fd.append('category',$('#skill-cat').value);
   fd.append('is_orchestrator','false');
+  
+  // État de chargement
+  $('#skill-status').innerHTML='<b style="color:var(--accent2)">⏳ Import en cours...</b><div class="small">Veuillez patienter</div>';
+  $('#skill-status').style.display='block';
+  
   try{
     const d=await apiForm('/manage/api/skills/import',fd);
-    $('#skill-status').innerHTML='<b style="color:var(--ok)">✓ Importé avec succès</b><div class="small">'+(d.files||[]).length+' fichier(s)</div>';
+    $('#skill-status').innerHTML='<b style="color:var(--ok)">✓ Importé avec succès</b><div class="small">'+(d.message||'')+'</div>';
     $('#skill-status').style.display='block';
     $('#skill-name').value='';$('#skill-desc').value='';$('#skill-cat').value='';$('#skill-file').value='';
     toast('Compétence importée ✓');
     loadSkills();loadOverview();
-  }catch(err){toast(err.message,false)}
+  }catch(err){
+    $('#skill-status').innerHTML='<b style="color:var(--err)">✗ Erreur</b><div class="small">'+esc(err.message)+'</div>';
+    $('#skill-status').style.display='block';
+    toast(err.message,false);
+  }
 }
 
 function skillCard(s){

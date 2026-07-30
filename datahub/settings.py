@@ -137,6 +137,11 @@ if not DEBUG:
 RATE_LIMIT_PER_MINUTE = int(os.getenv('RATE_LIMIT_PER_MINUTE', '60'))
 RATE_LIMIT_PER_HOUR = int(os.getenv('RATE_LIMIT_PER_HOUR', '1000'))
 
+# File upload configuration
+# Augmenter les limites pour permettre l'import de fichiers ZIP plus volumineux
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
+
 # Orchestration middleware : routes exemptées de la vérification de l'orchestrateur
 ORCHESTRATION_EXEMPT_PATHS = [
     '/manage/',
