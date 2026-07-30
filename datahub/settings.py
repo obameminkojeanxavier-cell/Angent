@@ -148,4 +148,5 @@ ORCHESTRATION_EXEMPT_PATHS = [
     '/static/',
     '/console/',
     '/api/skills/orchestrator/active/',  # Endpoint dédié exempté
+    '/api/skills/',  # Endpoint de liste des skills exempté
 ]

@@ -29,6 +29,7 @@ class OrchestrationMiddleware:
             '/static/',
             '/api/skills/orchestrator/',  # Endpoint dédié exempté
             '/api/skills/orchestrator/active/',  # Endpoint dédié exempté
+            '/api/skills/',  # Endpoint de liste des skills exempté
         ])
     
     def __call__(self, request):

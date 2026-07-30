@@ -11,8 +11,8 @@ seul un administrateur connecté peut les appeler.
 import json
 
 from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
-from django.views.decorators.csrf import ensure_csrf_cookie
-from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
+from django.views.decorators.http import require_POST, require_GET
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
 
@@ -203,9 +203,10 @@ def agent_delete(request, agent_id):
     return JsonResponse({'ok': True})
 
 
+@csrf_exempt
+@require_GET
 def skills_list(request):
-    if not _is_staff(request):
-        return _forbidden()
+    """Endpoint pour lister les skills disponibles (accessible sans authentification pour les agents)."""
     data = []
     for s in Skill.objects.all():
         data.append({
@@ -218,8 +219,7 @@ def skills_list(request):
     return JsonResponse({'skills': data, 'orchestrator_active': skills_registry.orchestrator_active()})
 
 
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET
+skills_list.csrf_exempt = True
 
 
 @csrf_exempt
