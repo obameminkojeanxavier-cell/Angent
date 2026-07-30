@@ -251,6 +251,14 @@ TOOL_SCOPES = {
 
 # --- Exécution des outils ---------------------------------------------------
 
+def _normalize_tool_name(name):
+    """Normalise les noms d'outils en supprimant le préfixe ChatGPT MCP."""
+    # Si le nom contient un point, supprimer tout avant le dernier point
+    if '.' in name:
+        return name.split('.')[-1]
+    return name
+
+
 def _needs_table(name, args, client):
     table = args.get('table_name')
     if table and not client.can_access_table(table):
@@ -303,12 +311,15 @@ def _find_competent_skill(action, table=None):
 
 
 def _run_tool(name, args, client):
-    _needs_table(name, args, client)
+    # Normaliser le nom de l'outil (supprimer le préfixe ChatGPT MCP)
+    normalized_name = _normalize_tool_name(name)
+    
+    _needs_table(normalized_name, args, client)
 
     # Vérifier l'orchestrateur pour les outils sensibles (accès DB)
     sensitive_tools = ['list_tables', 'get_table_schema', 'select', 'search', 
                       'create_table', 'add_column', 'insert', 'update', 'delete']
-    if name in sensitive_tools:
+    if normalized_name in sensitive_tools:
         orchestrator = _get_active_orchestrator()
         if not orchestrator:
             raise PermissionError(
@@ -320,22 +331,22 @@ def _run_tool(name, args, client):
         # Dans une version complète, l'orchestrateur analyserait la demande et déléguerait
         # Pour l'instant, on autorise l'accès si l'orchestrateur est actif
 
-    if name == "list_tables":
+    if normalized_name == "list_tables":
         return {"tables": DatabaseOperations.list_tables()}
-    if name == "get_table_schema":
+    if normalized_name == "get_table_schema":
         return {"schema": DatabaseOperations.get_table_schema(args["table_name"])}
-    if name == "select":
+    if normalized_name == "select":
         return {"data": DatabaseOperations.select(args["table_name"], args.get("filters"), args.get("limit"))}
-    if name == "search":
+    if normalized_name == "search":
         rows = DatabaseOperations.search(args["table_name"], args.get("q", ""), args.get("columns"), args.get("limit"))
         return {"count": len(rows), "data": rows}
-    if name == "create_table":
+    if normalized_name == "create_table":
         DatabaseOperations.create_table(args["table_name"], args["columns"])
         return {"message": f"Table {args['table_name']} created"}
-    if name == "add_column":
+    if normalized_name == "add_column":
         DatabaseOperations.add_column(args["table_name"], args["column_name"], args["column_type"])
         return {"message": f"Column {args['column_name']} added"}
-    if name == "insert":
+    if normalized_name == "insert":
         record = DatabaseOperations.insert(args["table_name"], args["data"])
         return {
             "success": True,
@@ -344,7 +355,7 @@ def _run_tool(name, args, client):
             "id": record.get("id"),
             "data": record
         }
-    if name == "update":
+    if normalized_name == "update":
         updated = DatabaseOperations.update(args["table_name"], args["data"], args["filters"])
         return {
             "success": True,
@@ -352,7 +363,7 @@ def _run_tool(name, args, client):
             "table": args["table_name"],
             "updated_count": updated
         }
-    if name == "delete":
+    if normalized_name == "delete":
         deleted = DatabaseOperations.delete(args["table_name"], args["filters"])
         return {
             "success": True,
@@ -360,15 +371,15 @@ def _run_tool(name, args, client):
             "table": args["table_name"],
             "deleted_count": deleted
         }
-    if name == "list_skills":
+    if normalized_name == "list_skills":
         return {"skills": skills_registry.list_skills()}
-    if name == "run_skill":
+    if normalized_name == "run_skill":
         return _run_skill(args, client)
-    if name == "get_task":
+    if normalized_name == "get_task":
         return _get_task(args, client)
 
     # Outils métier spécifiques
-    if name == "create_document":
+    if normalized_name == "create_document":
         table = "documents"
         if not client.can_access_table(table):
             raise PermissionError(f'Table non autorisée: {table}')
@@ -380,7 +391,7 @@ def _run_tool(name, args, client):
             "id": record.get("id"),
             "data": record
         }
-    if name == "create_product":
+    if normalized_name == "create_product":
         table = "produits"
         if not client.can_access_table(table):
             raise PermissionError(f'Table non autorisée: {table}')
@@ -392,7 +403,7 @@ def _run_tool(name, args, client):
             "id": record.get("id"),
             "data": record
         }
-    if name == "create_project":
+    if normalized_name == "create_project":
         table = "projets"
         if not client.can_access_table(table):
             raise PermissionError(f'Table non autorisée: {table}')
@@ -404,7 +415,7 @@ def _run_tool(name, args, client):
             "id": record.get("id"),
             "data": record
         }
-    if name == "create_task":
+    if normalized_name == "create_task":
         table = "taches"
         if not client.can_access_table(table):
             raise PermissionError(f'Table non autorisée: {table}')
@@ -416,7 +427,7 @@ def _run_tool(name, args, client):
             "id": record.get("id"),
             "data": record
         }
-    if name == "update_product":
+    if normalized_name == "update_product":
         table = "produits"
         if not client.can_access_table(table):
             raise PermissionError(f'Table non autorisée: {table}')
@@ -428,7 +439,7 @@ def _run_tool(name, args, client):
             "table": table,
             "updated_count": updated
         }
-    if name == "search_documents":
+    if normalized_name == "search_documents":
         table = "documents"
         if not client.can_access_table(table):
             raise PermissionError(f'Table non autorisée: {table}')
