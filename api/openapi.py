@@ -195,6 +195,13 @@ def build_schema(base_url):
                     "responses": _ok("Liste des skills"),
                 }
             },
+            "/api/skills/orchestrator/active/": {
+                "get": {
+                    "operationId": "getActiveOrchestrator",
+                    "summary": "Récupérer le skill orchestrateur actif (nom, description, statut, fichiers, instructions).",
+                    "responses": _ok("Détails de l'orchestrateur actif"),
+                }
+            },
             "/api/skills/{name}/": {
                 "get": {
                     "operationId": "getSkillDefinition",
