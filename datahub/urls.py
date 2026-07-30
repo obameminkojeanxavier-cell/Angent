@@ -8,6 +8,7 @@ from api.console import console_run, console_skills
 from api.openapi import openapi_schema
 from api.artifacts import render_artifact
 from api import manage as mng
+from django.shortcuts import render
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -23,6 +24,9 @@ urlpatterns = [
 
     # Catalogue public des skills (page d'accueil dynamique)
     path('public/skills', mng.public_skills, name='public-skills'),
+
+    # Politique de confidentialité
+    path('privacy/', lambda request: render(request, 'privacy.html'), name='privacy'),
 
     # Tableau de bord d'administration (GOD HAND) — réservé au staff connecté
     path('manage/', mng.dashboard, name='dashboard'),

@@ -44,6 +44,12 @@ def build_schema(base_url):
                 "à la base : uniquement ces opérations cadrées."
             ),
             "version": "1.0.0",
+            "termsOfService": f"{base_url}/privacy/",
+            "contact": {
+                "name": "DataHub Support",
+                "email": "admin@agent.co-ned.com",
+                "url": base_url,
+            },
         },
         "servers": [{"url": base_url}],
         "security": [{"bearerAuth": []}],
