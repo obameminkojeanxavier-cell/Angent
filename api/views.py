@@ -58,7 +58,11 @@ def _task_dict(task):
 
 # --- Données : lecture ------------------------------------------------------
 
-class ListTablesView(ReadView):
+class ListTablesView(ScopedView):
+    """Liste des tables nécessite une authentification obligatoire."""
+    required_scope = SCOPE_DATA_READ
+    orchestrator_exempt = False
+
     def get(self, request):
         try:
             tables = DatabaseOperations.list_tables()
