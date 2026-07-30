@@ -26,6 +26,7 @@ a{color:var(--accent2);text-decoration:none}
 .tab.active{color:#fff;border-color:var(--accent);box-shadow:0 6px 20px rgba(255,45,74,.25)}
 .small{font-size:12px;color:var(--muted)}
 .view{display:none}.view.active{display:block}
+.skill-view{display:none}.skill-view.active{display:block}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:14px}
 .card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--border);
  border-radius:14px;padding:16px}
@@ -103,42 +104,100 @@ h2.sec,h3.sec{margin:14px 0 6px;font-size:14px;text-transform:uppercase;letter-s
 
   <!-- SKILLS -->
   <div class="view" id="v-skills">
-    <div id="orch-banner"></div>
-    <div class="grid" style="grid-template-columns:1fr 1fr">
+    <div class="tabs" style="margin-bottom:16px">
+      <div class="tab active" data-s="import-orch">Importer l'orchestrateur</div>
+      <div class="tab" data-s="import-skill">Importer une compétence</div>
+      <div class="tab" data-s="manage">Gérer les skills</div>
+    </div>
+
+    <!-- ONGLET 1: IMPORTER L'ORCHESTRATEUR -->
+    <div class="skill-view active" id="s-import-orch">
       <div class="card">
-        <h3>🧠 Skill orchestrateur</h3>
-        <div class="small">Le skill principal : point d'entrée et verrou. Sans lui, les agents n'ont aucun accès. Un seul actif.</div>
-        <button class="btn" style="margin-top:12px" onclick="pickImport(true)">⬆ Importer / modifier l'orchestrateur</button>
-      </div>
-      <div class="card">
-        <h3>🧩 Skills métiers (compétences)</h3>
-        <div class="small">Capacités supplémentaires. Importe un fichier <b>.md</b> ou un dossier zippé <b>.zip</b>.</div>
-        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn" onclick="pickImport(false)">⬆ Importer un skill métier</button>
-          <button class="btn ghost" onclick="toggleManual()">Créer manuellement</button>
+        <h3>🧠 Skill orchestrateur — Porte d'entrée unique</h3>
+        <div class="small" style="margin-top:8px">
+          <b>Rôle critique :</b> L'orchestrateur est la <b>seule porte d'entrée</b> pour tous les agents (ChatGPT, Claude, etc.).
+          Aucun agent ne peut accéder directement à la base de données ou aux ressources internes.
         </div>
+        <div class="small" style="margin-top:8px">
+          <b>Fonctionnement :</b>
+          <ul style="margin:8px 0;padding-left:20px;font-size:12px;color:var(--muted)">
+            <li>L'agent transmet sa demande à l'orchestrateur</li>
+            <li>L'orchestrateur analyse l'action demandée</li>
+            <li>Il recherche le sous-skill compétent correspondant</li>
+            <li>Il délègue l'exécution si la compétence existe</li>
+            <li>Sinon, l'agent répond : "Je ne dispose d'aucune compétence permettant d'effectuer cette action."</li>
+          </ul>
+        </div>
+        <div class="small" style="margin-top:8px;color:var(--accent2)">
+          ⚠️ Sans orchestrateur actif, les agents n'ont <b>AUCUN ACCÈS</b> au système.
+        </div>
+        <div class="small" style="margin-top:8px">Formats acceptés : fichier <b>.md</b> ou dossier zippé <b>.zip</b></div>
+        <div class="field" style="margin-top:16px">
+          <label>Nom du skill (optionnel, déduit du fichier si vide)</label>
+          <input type="text" id="orch-name" placeholder="ex: orchestrateur">
+        </div>
+        <div class="field">
+          <label>Description (optionnel)</label>
+          <input type="text" id="orch-desc" placeholder="Description de l'orchestrateur">
+        </div>
+        <div class="field">
+          <label>Fichier à importer</label>
+          <input type="file" id="orch-file" accept=".md,.markdown,.zip">
+        </div>
+        <button class="btn" style="margin-top:12px" onclick="importOrch()">⬆ Importer l'orchestrateur</button>
       </div>
+      <div id="orch-status" class="agent" style="display:none;margin-top:14px"></div>
     </div>
 
-    <input type="file" id="imp-file" accept=".md,.markdown,.zip,.txt,.html,.json,.csv" style="display:none">
-
-    <div id="manual" class="agent" style="display:none">
-      <div class="field"><label>Nom</label><input type="text" id="ns-name" placeholder="ex: rapport.html"></div>
-      <div class="field"><label>Description</label><input type="text" id="ns-desc"></div>
-      <div class="field"><label>Catégorie</label><input type="text" id="ns-cat" placeholder="fichier, rapport..."></div>
-      <div class="field"><label><input type="checkbox" id="ns-orch" style="width:auto;margin-right:8px">
-        Ce skill est l'ORCHESTRATEUR</label></div>
-      <div class="field"><label>Instructions (SKILL.md)</label>
-        <textarea id="ns-instr" placeholder="Étapes, actions API à appeler..."></textarea></div>
-      <div class="field"><label>Fichiers (optionnel)</label><div id="ns-files"></div>
-        <button class="btn ghost" onclick="addFileRow()">+ Ajouter un fichier</button></div>
-      <button class="btn" onclick="createSkill()">Enregistrer le skill</button>
+    <!-- ONGLET 2: IMPORTER UNE COMPÉTENCE -->
+    <div class="skill-view" id="s-import-skill">
+      <div class="card">
+        <h3>🧩 Skill de compétence — Délégation par l'orchestrateur</h3>
+        <div class="small" style="margin-top:8px">
+          <b>Rôle :</b> Les compétences sont des sous-skills que l'orchestrateur peut déléguer pour exécuter des actions spécifiques.
+        </div>
+        <div class="small" style="margin-top:8px">
+          <b>Mécanisme :</b>
+          <ul style="margin:8px 0;padding-left:20px;font-size:12px;color:var(--muted)">
+            <li>L'orchestrateur analyse la demande de l'utilisateur</li>
+            <li>Il recherche parmi les compétences installées celle qui correspond</li>
+            <li>Il délègue l'exécution au sous-skill compétent</li>
+            <li>Le résultat est retourné à l'agent puis à l'utilisateur</li>
+          </ul>
+        </div>
+        <div class="small" style="margin-top:8px;color:var(--accent2)">
+          💡 Une compétence ne fonctionne que si elle est <b>importée</b> et si l'orchestrateur est <b>actif</b>.
+        </div>
+        <div class="small" style="margin-top:8px">Formats acceptés : fichier <b>.md</b> ou dossier zippé <b>.zip</b></div>
+        <div class="field" style="margin-top:16px">
+          <label>Nom du skill (optionnel, déduit du fichier si vide)</label>
+          <input type="text" id="skill-name" placeholder="ex: rapport.html">
+        </div>
+        <div class="field">
+          <label>Catégorie (optionnel)</label>
+          <input type="text" id="skill-cat" placeholder="ex: rapport, fichier, export...">
+        </div>
+        <div class="field">
+          <label>Description (optionnel)</label>
+          <input type="text" id="skill-desc" placeholder="Description de la compétence">
+        </div>
+        <div class="field">
+          <label>Fichier à importer</label>
+          <input type="file" id="skill-file" accept=".md,.markdown,.zip">
+        </div>
+        <button class="btn" style="margin-top:12px" onclick="importSkill()">⬆ Importer la compétence</button>
+      </div>
+      <div id="skill-status" class="agent" style="display:none;margin-top:14px"></div>
     </div>
 
-    <h2 class="sec">Orchestrateur</h2>
-    <div id="skills-orch"></div>
-    <h2 class="sec">Skills métiers</h2>
-    <div id="skills-biz"></div>
+    <!-- ONGLET 3: GÉRER LES SKILLS -->
+    <div class="skill-view" id="s-manage">
+      <div id="orch-banner"></div>
+      <h2 class="sec">Orchestrateur</h2>
+      <div id="skills-orch"></div>
+      <h2 class="sec">Compétences (skills métiers)</h2>
+      <div id="skills-biz"></div>
+    </div>
   </div>
 
   <!-- Modal consultation -->
@@ -225,8 +284,7 @@ async function saveAgent(id){
   catch(e){toast(e.message,false)}
 }
 async function toggleActive(id,val){try{await api('/manage/api/agents/'+id+'/update','POST',{is_active:val});loadOverview();}catch(e){toast(e.message,false)}}
-async function delAgent(id,name){if(!confirm('Supprimer l\\'agent '+name+' ?'))return;
-  try{await api('/manage/api/agents/'+id+'/delete','POST',{});toast('Agent supprimé');loadOverview();}catch(e){toast(e.message,false)}}
+async function delAgent(id,name){if(!confirm("Supprimer l'agent "+name+" ?"))return;try{await api('/manage/api/agents/'+id+'/delete','POST',{});toast('Agent supprimé');loadOverview();}catch(e){toast(e.message,false)}}
 async function createAgent(){
   const name=$('#na-name').value.trim();if(!name)return toast('Nom requis',false);
   const scopes=collectScopes($('#na-scopes'));
@@ -242,38 +300,73 @@ async function apiForm(path,fd){
   const d=await r.json().catch(()=>({}));
   if(!r.ok)throw new Error(d.error||('HTTP '+r.status));return d;
 }
-function toggleManual(){const m=$('#manual');m.style.display=(m.style.display==='none'||!m.style.display)?'block':'none';}
-function addFileRow(path='',content=''){
-  const div=document.createElement('div');div.className='filerow';
-  div.innerHTML=`<input type="text" placeholder="chemin (ex: templates/x.html)" value="${esc(path)}">
-    <input type="text" placeholder="contenu" value="${esc(content)}">
-    <button class="btn ghost" onclick="this.parentElement.remove()">✕</button>`;
-  $('#ns-files').appendChild(div);
-}
 
-let IMP_ORCH=false;
-function pickImport(isOrch){IMP_ORCH=isOrch;const f=$('#imp-file');f.value='';f.click();}
-$('#imp-file').addEventListener('change',async e=>{
-  const f=e.target.files[0];if(!f)return;
-  const def=f.name.replace(/\.(md|markdown|zip|txt|html|json|csv)$/i,'');
-  const name=prompt('Nom du skill :', IMP_ORCH?'orchestrateur':def);
-  if(!name){return;}
-  const fd=new FormData();fd.append('file',f);fd.append('name',name);fd.append('is_orchestrator',IMP_ORCH?'true':'false');
-  try{const d=await apiForm('/manage/api/skills/import',fd);
-    toast('Importé ✓ — '+(d.files||[]).length+' fichier(s)');loadSkills();loadOverview();}
-  catch(err){toast(err.message,false)}
+// Gestion des onglets skills
+document.querySelectorAll('#v-skills .tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('#v-skills .tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.skill-view').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');$('#s-'+t.dataset.s).classList.add('active');
+  if(t.dataset.s==='manage')loadSkills();
 });
 
+// Importer l'orchestrateur
+async function importOrch(){
+  const f=$('#orch-file').files[0];
+  if(!f)return toast('Sélectionnez un fichier',false);
+  const name=$('#orch-name').value.trim()||f.name.replace(/\.(md|markdown|zip)$/i,'');
+  const fd=new FormData();
+  fd.append('file',f);
+  fd.append('name',name);
+  fd.append('description',$('#orch-desc').value);
+  fd.append('is_orchestrator','true');
+  try{
+    const d=await apiForm('/manage/api/skills/import',fd);
+    $('#orch-status').innerHTML='<b style="color:var(--ok)">✓ Importé avec succès</b><div class="small">'+(d.files||[]).length+' fichier(s)</div>';
+    $('#orch-status').style.display='block';
+    $('#orch-name').value='';$('#orch-desc').value='';$('#orch-file').value='';
+    toast('Orchestrateur importé ✓');
+    loadSkills();loadOverview();
+  }catch(err){toast(err.message,false)}
+}
+
+// Importer une compétence
+async function importSkill(){
+  const f=$('#skill-file').files[0];
+  if(!f)return toast('Sélectionnez un fichier',false);
+  const name=$('#skill-name').value.trim()||f.name.replace(/\.(md|markdown|zip)$/i,'');
+  const fd=new FormData();
+  fd.append('file',f);
+  fd.append('name',name);
+  fd.append('description',$('#skill-desc').value);
+  fd.append('category',$('#skill-cat').value);
+  fd.append('is_orchestrator','false');
+  try{
+    const d=await apiForm('/manage/api/skills/import',fd);
+    $('#skill-status').innerHTML='<b style="color:var(--ok)">✓ Importé avec succès</b><div class="small">'+(d.files||[]).length+' fichier(s)</div>';
+    $('#skill-status').style.display='block';
+    $('#skill-name').value='';$('#skill-desc').value='';$('#skill-cat').value='';$('#skill-file').value='';
+    toast('Compétence importée ✓');
+    loadSkills();loadOverview();
+  }catch(err){toast(err.message,false)}
+}
+
 function skillCard(s){
+  const fileCount=(s.files||[]).length;
+  const format=fileCount>1?'Dossier ('+fileCount+' fichiers)':'Fichier unique';
+  const date=s.updated_at?new Date(s.updated_at).toLocaleDateString('fr-FR'):'—';
   return `<div class="agent"><div class="row">
-    <div class="name">${esc(s.name)} ${s.is_orchestrator?'<span class="badge" style="background:rgba(255,106,61,.18);color:var(--accent2)">ORCHESTRATEUR</span>':''} <span class="badge ${s.is_active?'on':'off'}">${s.is_active?'actif':'inactif'}</span> <span class="small">${esc(s.kind||s.category||'')}</span></div>
+    <div class="name">${esc(s.name)} ${s.is_orchestrator?'<span class="badge" style="background:rgba(255,106,61,.18);color:var(--accent2)">ORCHESTRATEUR</span>':''} <span class="badge ${s.is_active?'on':'off'}">${s.is_active?'actif':'inactif'}</span></div>
     <div>
       <button class="btn ghost" onclick="consulter('${esc(s.name)}')">Consulter</button>
       <button class="btn ghost" onclick="toggleSkill('${esc(s.name)}')">${s.is_active?'Désactiver':'Activer'}</button>
       <button class="btn danger" onclick="delSkill('${esc(s.name)}')">Supprimer</button>
     </div></div>
-    <div class="small">${esc(s.description||'')}</div>
-    <div class="small" style="margin-top:6px">Fichiers : ${(s.files||[]).map(f=>esc(f.path)).join(', ')||'—'}</div>
+    <div class="small">${esc(s.description||'Pas de description')}</div>
+    <div class="small" style="margin-top:6px">
+      <span class="badge cat">${esc(s.kind||s.category||'compétence')}</span> ·
+      ${format} ·
+      Importé le ${date}
+    </div>
   </div>`;
 }
 async function loadSkills(){
@@ -283,8 +376,8 @@ async function loadSkills(){
     : '<div class="agent" style="border-color:var(--err)"><b style="color:var(--err)">⚠️ Aucun orchestrateur actif</b><div class="small">Les agents n\'ont AUCUN accès tant qu\'un orchestrateur n\'est pas importé et actif.</div></div>';
   const orch=d.skills.filter(s=>s.is_orchestrator);
   const biz=d.skills.filter(s=>!s.is_orchestrator);
-  $('#skills-orch').innerHTML=orch.map(skillCard).join('')||'<p class="small">Aucun orchestrateur importé. Utilise « Importer / modifier l\'orchestrateur ».</p>';
-  $('#skills-biz').innerHTML=biz.map(skillCard).join('')||'<p class="small">Aucun skill métier importé.</p>';
+  $('#skills-orch').innerHTML=orch.map(skillCard).join('')||'<p class="small">Aucun orchestrateur importé. Utilise « Importer l\'orchestrateur ».</p>';
+  $('#skills-biz').innerHTML=biz.map(skillCard).join('')||'<p class="small">Aucune compétence importée.</p>';
 }
 async function toggleSkill(name){
   try{await api('/manage/api/skills/'+encodeURIComponent(name)+'/toggle','POST',{});toast('Statut mis à jour ✓');loadSkills();loadOverview();}
@@ -300,16 +393,6 @@ async function consulter(name){
       (s.files.length? s.files.map(f=>'<div style="margin-bottom:10px"><b>'+esc(f.path)+'</b> <span class="small">('+esc(f.content_type)+')</span><pre class="code">'+esc((f.content||'').slice(0,4000))+'</pre></div>').join('') : '<p class="small">—</p>');
     $('#modal').style.display='block';
   }catch(e){toast(e.message,false)}
-}
-async function createSkill(){
-  const name=$('#ns-name').value.trim();if(!name)return toast('Nom requis',false);
-  const files=[...document.querySelectorAll('#ns-files .filerow')].map(r=>{
-    const i=r.querySelectorAll('input');return{path:i[0].value.trim(),content:i[1].value};
-  }).filter(f=>f.path);
-  try{await api('/manage/api/skills/create','POST',{name,description:$('#ns-desc').value,
-    category:$('#ns-cat').value,instructions:$('#ns-instr').value,is_orchestrator:$('#ns-orch').checked,files});
-    toast('Skill enregistré ✓');$('#ns-name').value='';$('#ns-desc').value='';$('#ns-instr').value='';$('#ns-files').innerHTML='';$('#ns-orch').checked=false;
-    loadSkills();loadOverview();}catch(e){toast(e.message,false)}
 }
 async function delSkill(name){if(!confirm('Supprimer le skill '+name+' ?'))return;
   try{await api('/manage/api/skills/'+encodeURIComponent(name)+'/delete','POST',{});toast('Skill supprimé');loadSkills();loadOverview();}catch(e){toast(e.message,false)}}

@@ -10,8 +10,7 @@ seul un administrateur connecté peut les appeler.
 """
 import json
 
-from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth import logout as auth_logout
+from django.contrib.auth import authenticate, login as auth_login, logout as auth_logout
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse
@@ -40,15 +39,41 @@ def _agent_dict(a):
 
 
 @ensure_csrf_cookie
-@staff_member_required
 def dashboard(request):
+    if not _is_staff(request):
+        return redirect('/manage/login/?next=/manage/')
     return render(request, 'dashboard.html', {'all_scopes': ALL_SCOPES})
 
 
+@ensure_csrf_cookie
+def login_view(request):
+    """Page de connexion à l'administration (GOD HAND), style maison."""
+    nxt = request.GET.get('next') or request.POST.get('next') or '/manage/'
+    if not str(nxt).startswith('/'):
+        nxt = '/manage/'
+    if _is_staff(request):
+        return redirect(nxt)
+    error = None
+    if request.method == 'POST':
+        user = authenticate(
+            request,
+            username=request.POST.get('username', ''),
+            password=request.POST.get('password', ''),
+        )
+        if user is None:
+            error = "Identifiants invalides."
+        elif not user.is_staff:
+            error = "Ce compte n'a pas accès à l'administration."
+        else:
+            auth_login(request, user)
+            return redirect(nxt)
+    return render(request, 'login.html', {'error': error, 'next': nxt})
+
+
 def logout_view(request):
-    """Déconnexion (GET ou POST) puis redirection vers la page de connexion admin."""
+    """Déconnexion puis retour à la page de connexion GOD HAND."""
     auth_logout(request)
-    return redirect('/admin/login/?loggedout=1')
+    return redirect('/manage/login/?loggedout=1')
 
 
 def _skill_catalog(active_only=False):
@@ -186,6 +211,7 @@ def skills_list(request):
         data.append({
             'name': s.name, 'description': s.description, 'category': s.category,
             'kind': s.kind, 'is_orchestrator': s.is_orchestrator, 'is_active': s.is_active,
+            'updated_at': s.updated_at.isoformat() if s.updated_at else None,
             'files': [{'path': f.path, 'content_type': f.content_type, 'size': len(f.content or '')}
                       for f in s.files.all()],
         })

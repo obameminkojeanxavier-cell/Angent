@@ -32,6 +32,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'api.rate_limit.RateLimitMiddleware',
+    'api.orchestration.OrchestrationMiddleware',
 ]
 
 ROOT_URLCONF = 'datahub.urls'
@@ -135,3 +136,15 @@ if not DEBUG:
 # Rate limiting configuration
 RATE_LIMIT_PER_MINUTE = int(os.getenv('RATE_LIMIT_PER_MINUTE', '60'))
 RATE_LIMIT_PER_HOUR = int(os.getenv('RATE_LIMIT_PER_HOUR', '1000'))
+
+# Orchestration middleware : routes exemptées de la vérification de l'orchestrateur
+ORCHESTRATION_EXEMPT_PATHS = [
+    '/manage/',
+    '/admin/',
+    '/api.md',
+    '/skill.md',
+    '/openapi.json',
+    '/a/',
+    '/static/',
+    '/console/',
+]

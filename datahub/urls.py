@@ -26,6 +26,7 @@ urlpatterns = [
 
     # Tableau de bord d'administration (GOD HAND) — réservé au staff connecté
     path('manage/', mng.dashboard, name='dashboard'),
+    path('manage/login/', mng.login_view, name='manage-login'),
     path('manage/logout/', mng.logout_view, name='manage-logout'),
     path('manage/api/overview', mng.overview),
     path('manage/api/agents/create', mng.agent_create),

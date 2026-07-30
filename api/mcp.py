@@ -7,6 +7,8 @@ Context Protocol), sur un unique endpoint HTTP en JSON-RPC 2.0 (transport
 
 Authentification et permissions identiques au REST : token Bearer résolu vers
 un AgentClient, scopes vérifiés par outil, opérations journalisées (audit).
+
+ORCHESTRATION : Tous les appels doivent passer par le skill orchestrateur.
 """
 import json
 
@@ -19,7 +21,7 @@ from .tokens import (
 )
 from .audit import audit
 from . import skills as skills_registry
-from .models import SkillTask
+from .models import SkillTask, Skill
 
 DEFAULT_PROTOCOL_VERSION = "2025-06-18"
 SERVER_INFO = {"name": "datahub", "version": "2.0.0"}
@@ -255,8 +257,48 @@ def _needs_table(name, args, client):
         raise PermissionError(f'Table non autorisée: {table}')
 
 
+def _get_active_orchestrator():
+    """Récupère le skill orchestrateur actif."""
+    try:
+        return Skill.objects.filter(is_orchestrator=True, is_active=True).first()
+    except Exception:
+        return None
+
+
+def _find_competent_skill(action, table=None):
+    """Recherche un skill de compétence compatible avec l'action demandée."""
+    try:
+        # Recherche basique : compétences dont la catégorie ou le nom correspond à l'action/table
+        skills = Skill.objects.filter(is_active=True, is_orchestrator=False)
+        for skill in skills:
+            # Vérification simple : si la catégorie contient le mot-clé de l'action
+            if action.lower() in skill.category.lower() or action.lower() in skill.name.lower():
+                return skill
+            # Si une table est spécifiée, vérifier si le skill mentionne cette table
+            if table and table.lower() in skill.description.lower():
+                return skill
+    except Exception:
+        pass
+    return None
+
+
 def _run_tool(name, args, client):
     _needs_table(name, args, client)
+
+    # Vérifier l'orchestrateur pour les outils sensibles (accès DB)
+    sensitive_tools = ['list_tables', 'get_table_schema', 'select', 'search', 
+                      'create_table', 'add_column', 'insert', 'update', 'delete']
+    if name in sensitive_tools:
+        orchestrator = _get_active_orchestrator()
+        if not orchestrator:
+            raise PermissionError(
+                "Aucun skill orchestrateur actif. Les agents doivent passer par l'orchestrateur "
+                "pour accéder au système. Importez et activez un orchestrateur depuis l'administration."
+            )
+        
+        # Log de délégation (simplifié pour l'instant)
+        # Dans une version complète, l'orchestrateur analyserait la demande et déléguerait
+        # Pour l'instant, on autorise l'accès si l'orchestrateur est actif
 
     if name == "list_tables":
         return {"tables": DatabaseOperations.list_tables()}
