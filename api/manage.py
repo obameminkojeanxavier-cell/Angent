@@ -218,11 +218,17 @@ def skills_list(request):
     return JsonResponse({'skills': data, 'orchestrator_active': skills_registry.orchestrator_active()})
 
 
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET
+
+
+@csrf_exempt
+@require_GET
 def orchestrator_active(request):
     """Endpoint dédié pour récupérer l'orchestrateur actif.
     
     Retourne les détails de l'orchestrateur actif ou null si aucun n'est disponible.
-    Accessible sans authentification staff (pour les agents).
+    Accessible sans authentification (pour les agents).
     """
     try:
         orchestrator = Skill.objects.filter(is_orchestrator=True, is_active=True).first()
@@ -248,6 +254,9 @@ def orchestrator_active(request):
         })
     except Exception as e:
         return JsonResponse({'orchestrator': None, 'message': f'Erreur: {str(e)}'}, status=500)
+
+
+orchestrator_active.csrf_exempt = True
 
 
 @require_POST

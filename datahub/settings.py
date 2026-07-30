@@ -147,4 +147,5 @@ ORCHESTRATION_EXEMPT_PATHS = [
     '/a/',
     '/static/',
     '/console/',
+    '/api/skills/orchestrator/active/',  # Endpoint dédié exempté
 ]
