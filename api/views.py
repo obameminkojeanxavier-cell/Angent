@@ -264,8 +264,8 @@ class DeleteView(ScopedView):
 
 # --- Skills & tâches --------------------------------------------------------
 
-class SkillsListView(ScopedView):
-    required_scope = SCOPE_SKILLS
+class SkillsListView(ReadView):
+    """Liste des skills accessible sans authentification obligatoire (pour ChatGPT)."""
     orchestrator_exempt = True  # catalogue toujours consultable
 
     def get(self, request):
