@@ -318,6 +318,7 @@ def skill_import(request):
     import io
     import os
     import zipfile
+    import re
 
     up = request.FILES.get('file')
     if not up:
@@ -333,7 +334,10 @@ def skill_import(request):
         try:
             z = zipfile.ZipFile(io.BytesIO(up.read()))
         except zipfile.BadZipFile:
-            return JsonResponse({'error': 'Fichier ZIP invalide'}, status=400)
+            return JsonResponse({'error': 'Fichier ZIP invalide ou corrompu'}, status=400)
+        except Exception as e:
+            return JsonResponse({'error': f'Erreur lors de la lecture du ZIP: {str(e)}'}, status=400)
+        
         for member in z.namelist():
             if member.endswith('/'):
                 continue
@@ -348,19 +352,61 @@ def skill_import(request):
             if len(content.encode('utf-8')) > _MAX_IMPORT_FILE:
                 continue
             files.append((cp, content))
+        
+        if not files:
+            return JsonResponse({'error': 'Le fichier ZIP ne contient aucun fichier texte exploitable'}, status=400)
+        
         # Retire un dossier racine commun (ex: "mon_skill/SKILL.md" -> "SKILL.md")
         tops = {p.split('/')[0] for p, _ in files if '/' in p}
         if files and len(tops) == 1 and all('/' in p for p, _ in files):
             root = tops.pop()
             files = [(p[len(root) + 1:], c) for p, c in files]
+        
         if not name:
-            name = _clean_zip_path(fname)[:-4] or 'skill'
+            # Utiliser le nom du dossier racine ou le nom du fichier ZIP
+            name = tops.pop() if tops else _clean_zip_path(fname)[:-4] or 'skill'
+        
+        # Extraire automatiquement le nom et la description depuis SKILL.md si disponible
+        skill_md_content = None
+        for p, c in files:
+            if p.lower() == 'skill.md':
+                skill_md_content = c
+                break
+        
+        if skill_md_content and not description:
+            # Extraire la description depuis le premier paragraphe
+            lines = skill_md_content.split('\n')
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    description = line
+                    break
+        
+        if skill_md_content and not category:
+            # Essayer d'extraire la catégorie depuis le contenu
+            if 'orchestrateur' in skill_md_content.lower():
+                category = 'orchestrateur'
+            elif 'html' in skill_md_content.lower():
+                category = 'html'
+            elif 'data' in skill_md_content.lower():
+                category = 'data'
+            else:
+                category = 'general'
     else:
         content = up.read().decode('utf-8', errors='replace')
         path = 'SKILL.md' if fname.lower().endswith(('.md', '.markdown')) else fname
         files = [(path, content)]
         if not name:
             name = fname.rsplit('.', 1)[0]
+        
+        # Extraire la description depuis le contenu si non fournie
+        if not description:
+            lines = content.split('\n')
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    description = line
+                    break
 
     if not name:
         return JsonResponse({'error': 'Nom requis'}, status=400)
@@ -380,8 +426,16 @@ def skill_import(request):
         ext = os.path.splitext(p)[1].lower()
         SkillFile.objects.create(skill=skill, path=p, content=c,
                                  content_type=_CT_BY_EXT.get(ext, 'text/plain'))
-    return JsonResponse({'ok': True, 'name': name, 'is_orchestrator': is_orch,
-                         'files': [p for p, _ in files]})
+    
+    return JsonResponse({
+        'ok': True, 
+        'name': name, 
+        'is_orchestrator': is_orch,
+        'description': description,
+        'category': category,
+        'files': [p for p, _ in files],
+        'message': f'Skill "{name}" importé avec succès ({len(files)} fichiers)'
+    })
 
 
 def skill_detail(request, name):
