@@ -10,7 +10,45 @@ import os
 import re
 import tempfile
 import subprocess
+import zipfile
 from pathlib import Path
+
+
+def detect_skill_root(extract_dir: Path) -> Path:
+    """Détecte automatiquement la racine du skill en cherchant SKILL.md."""
+    skill_files = list(extract_dir.rglob("SKILL.md"))
+    
+    if not skill_files:
+        raise ValueError("Aucun fichier SKILL.md trouvé dans le package.")
+    
+    if len(skill_files) > 1:
+        raise ValueError("Plusieurs racines de skill détectées dans le package.")
+    
+    return skill_files[0].parent
+
+
+def validate_zip_structure(extract_dir: Path) -> None:
+    """Valide la structure du ZIP extrait."""
+    # Vérifier que SKILL.md existe
+    skill_files = list(extract_dir.rglob("SKILL.md"))
+    if not skill_files:
+        raise ValueError("Aucun fichier SKILL.md trouvé dans le package.")
+    
+    if len(skill_files) > 1:
+        raise ValueError("Plusieurs racines de skill détectées dans le package.")
+    
+    # Vérifier l'absence de chemins dangereux (.. dans les chemins relatifs)
+    for file_path in extract_dir.rglob("*"):
+        if file_path.is_file():
+            try:
+                relative = file_path.relative_to(extract_dir)
+                # Vérifier que le chemin résolu reste dans extract_dir
+                resolved = (extract_dir / relative).resolve()
+                if not str(resolved).startswith(str(extract_dir.resolve())):
+                    raise ValueError(f"Chemin dangereux détecté : {relative}")
+            except ValueError:
+                # Erreur lors du calcul du chemin relatif
+                raise ValueError(f"Chemin invalide détecté : {file_path}")
 
 
 class SkillExecutor:
@@ -86,11 +124,17 @@ class SkillExecutor:
         
         # Créer un environnement temporaire
         with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            
             # Écrire tous les fichiers du skill dans le répertoire temporaire
             for path, file_obj in self.files.items():
-                file_path = Path(tmpdir) / path
+                file_path = tmpdir_path / path
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 file_path.write_text(file_obj.content)
+            
+            # Valider la structure et détecter la racine du skill
+            validate_zip_structure(tmpdir_path)
+            skill_root = detect_skill_root(tmpdir_path)
             
             # Mapping des paramètres vers les arguments CLI (selon bfev_pipeline.py)
             param_mapping = {
@@ -124,8 +168,13 @@ class SkillExecutor:
                 output_filename = f"{document_type}.docx"
                 output_path = str(output_dir / output_filename)
             
+            # Construire le chemin du script relatif à la racine du skill
+            script_path = skill_root / entry_point
+            if not script_path.exists():
+                raise FileNotFoundError(f"Script introuvable : {script_path}")
+            
             # Construire les arguments de ligne de commande
-            args = ['python', str(Path(tmpdir) / entry_point)]
+            args = ['python', str(script_path)]
             
             # Ajouter le chemin de sortie (obligatoire selon bfev_pipeline.py)
             args.append('--output')
@@ -155,13 +204,13 @@ class SkillExecutor:
             # Afficher la commande pour débogage
             import logging
             logger = logging.getLogger(__name__)
-            logger.info(f"Executing skill {self.skill.name} with command: {' '.join(args)}")
+            logger.info(f"Executing skill {self.skill.name} from root {skill_root} with command: {' '.join(args)}")
             
-            # Exécuter le script
+            # Exécuter le script depuis la racine du skill
             try:
                 result = subprocess.run(
                     args,
-                    cwd=tmpdir,
+                    cwd=skill_root,
                     env=env,
                     capture_output=True,
                     text=True,
@@ -173,11 +222,11 @@ class SkillExecutor:
                 
                 # Chercher les fichiers générés (PDF, DOCX, etc.)
                 generated_files = []
-                for root, dirs, files in os.walk(tmpdir):
+                for root, dirs, files in os.walk(skill_root):
                     for file in files:
                         file_path = Path(root) / file
                         # Ignorer les fichiers originaux du skill
-                        relative_path = file_path.relative_to(tmpdir)
+                        relative_path = file_path.relative_to(skill_root)
                         if str(relative_path) not in self.files:
                             generated_files.append(file_path)
                 
@@ -201,7 +250,7 @@ class SkillExecutor:
                             'output_type': 'docx',
                         }
                 
-                # Priorité aux fichiers PDF dans tmpdir
+                # Priorité aux fichiers PDF dans skill_root
                 pdf_files = [f for f in generated_files if f.suffix.lower() == '.pdf']
                 if pdf_files:
                     pdf_file = pdf_files[0]
