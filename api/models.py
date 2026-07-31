@@ -172,7 +172,9 @@ class Artifact(models.Model):
                             editable=False, db_index=True)
     name = models.CharField(max_length=200, blank=True, default='')
     content_type = models.CharField(max_length=100, default='text/html')
+    # Contenu texte, ou base64 du binaire lorsque is_binary est vrai (PDF, DOCX…).
     content = models.TextField(blank=True, default='')
+    is_binary = models.BooleanField(default=False)
     client = models.ForeignKey(
         AgentClient, null=True, blank=True,
         on_delete=models.SET_NULL, related_name='artifacts',

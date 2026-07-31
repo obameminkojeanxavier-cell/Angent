@@ -346,16 +346,19 @@ class SkillRunView(ReadView):
                         is_binary = False
                     
                     artifact = Artifact.objects.create(
-                        name=f"{name}_output",
+                        # Nom du livrable produit par le skill s'il est connu
+                        # (il donne l'extension du fichier téléchargé).
+                        name=result.get('filename') or f"{name}_output",
                         content_type=result['content_type'],
                         content=content,
+                        is_binary=is_binary,
                         client=client if getattr(client, 'pk', None) else None,
                     )
-                    
+
                     # Générer l'URL publique
                     base = getattr(settings, 'OPENAPI_BASE_URL', '') or f"{request.scheme}://{request.get_host()}"
                     url = f"{base}/a/{artifact.slug}"
-                    
+
                     task.status = 'succeeded'
                     task.result = {
                         'artifact': artifact.slug,
@@ -363,6 +366,8 @@ class SkillRunView(ReadView):
                         'content_type': result['content_type'],
                         'output_type': result.get('output_type', 'unknown'),
                         'is_binary': is_binary,
+                        'filename': result.get('filename'),
+                        'size': len(result['content']),
                     }
                     if 'warning' in result:
                         task.result['warning'] = result['warning']
