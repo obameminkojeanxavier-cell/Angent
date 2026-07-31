@@ -125,7 +125,12 @@ class SkillFile(models.Model):
 
     skill = models.ForeignKey(Skill, related_name='files', on_delete=models.CASCADE)
     path = models.CharField(max_length=255)
+    # Contenu texte (scripts, markdown, html, yaml…)
     content = models.TextField(blank=True, default='')
+    # Contenu binaire (logos PNG/WEBP, modèles DOCX…) : indispensable pour que
+    # les ressources du skill soient restituées à l'exécution.
+    content_binary = models.BinaryField(null=True, blank=True, editable=False)
+    is_binary = models.BooleanField(default=False)
     content_type = models.CharField(max_length=100, default='text/plain')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -136,6 +141,24 @@ class SkillFile(models.Model):
 
     def __str__(self):
         return f'{self.skill.name}/{self.path}'
+
+    @property
+    def size(self):
+        if self.is_binary:
+            return len(self.content_binary or b'')
+        return len((self.content or '').encode('utf-8'))
+
+    def write_to(self, target_path):
+        """Écrit ce fichier sur le disque, en binaire ou en texte selon son type."""
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.is_binary:
+            data = self.content_binary
+            # psycopg peut renvoyer un memoryview pour un BinaryField.
+            if isinstance(data, memoryview):
+                data = data.tobytes()
+            target_path.write_bytes(data or b'')
+        else:
+            target_path.write_text(self.content or '', encoding='utf-8')
 
 
 class Artifact(models.Model):

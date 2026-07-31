@@ -117,25 +117,41 @@ class SkillExecutor:
         return None
     
     def _execute_python(self, entry_point):
-        """Exécute un script Python."""
-        file_obj = self.files.get(entry_point)
-        if not file_obj:
+        """Exécute un script Python du skill, avec TOUTES ses ressources."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        if entry_point not in self.files:
             raise FileNotFoundError(f"Fichier introuvable : {entry_point}")
-        
+
         # Créer un environnement temporaire
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
-            
-            # Écrire tous les fichiers du skill dans le répertoire temporaire
+
+            # Restituer l'arborescence complète du skill : fichiers texte ET
+            # ressources binaires (logos, modèles DOCX…). Sans les binaires, les
+            # pipelines échouent avec « logo introuvable ».
             for path, file_obj in self.files.items():
-                file_path = tmpdir_path / path
-                file_path.parent.mkdir(parents=True, exist_ok=True)
-                file_path.write_text(file_obj.content)
-            
+                file_obj.write_to(tmpdir_path / path)
+
             # Valider la structure et détecter la racine du skill
             validate_zip_structure(tmpdir_path)
             skill_root = detect_skill_root(tmpdir_path)
-            
+
+            # Journalisation de diagnostic : racine réelle et inventaire restitué.
+            written = sorted(
+                p.relative_to(skill_root).as_posix()
+                for p in skill_root.rglob('*') if p.is_file()
+            )
+            logger.info("skill=%s skill_root=%s", self.skill.name, skill_root)
+            logger.info("skill_files_written=%s", written)
+            missing_binaries = [
+                p for p, f in self.files.items()
+                if f.is_binary and not (tmpdir_path / p).exists()
+            ]
+            if missing_binaries:
+                logger.warning("ressources binaires manquantes=%s", missing_binaries)
+
             # Mapping des paramètres vers les arguments CLI (selon bfev_pipeline.py)
             param_mapping = {
                 'content': 'text',
@@ -168,11 +184,23 @@ class SkillExecutor:
                 output_filename = f"{document_type}.docx"
                 output_path = str(output_dir / output_filename)
             
-            # Construire le chemin du script relatif à la racine du skill
-            script_path = skill_root / entry_point
-            if not script_path.exists():
-                raise FileNotFoundError(f"Script introuvable : {script_path}")
-            
+            # Résoudre le script : `entry_point` est un chemin tel que stocké en
+            # base, qui peut inclure (ou non) le dossier racine du skill. On tente
+            # les deux bases, puis une recherche par nom de fichier.
+            script_path = None
+            for candidate in (tmpdir_path / entry_point, skill_root / entry_point):
+                if candidate.is_file():
+                    script_path = candidate
+                    break
+            if script_path is None:
+                matches = list(skill_root.rglob(Path(entry_point).name))
+                if matches:
+                    script_path = matches[0]
+            if script_path is None:
+                raise FileNotFoundError(
+                    f"Script introuvable : {entry_point} (racine détectée : {skill_root})"
+                )
+
             # Construire les arguments de ligne de commande
             args = ['python', str(script_path)]
             
@@ -201,12 +229,13 @@ class SkillExecutor:
             for key, value in self.params.items():
                 env[f'SKILL_{key.upper()}'] = str(value)
             
-            # Afficher la commande pour débogage
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"Executing skill {self.skill.name} from root {skill_root} with command: {' '.join(args)}")
-            
-            # Exécuter le script depuis la racine du skill
+            # Journaliser la commande exacte, le cwd et la sortie attendue.
+            logger.info("script=%s cwd=%s output=%s", script_path, skill_root, output_path)
+            logger.info("command=%s", ' '.join(args))
+
+            # Exécuter le script depuis la racine du skill.
+            # Timeout large : la conversion PDF via LibreOffice est lente au
+            # premier lancement (initialisation du profil).
             try:
                 result = subprocess.run(
                     args,
@@ -214,64 +243,54 @@ class SkillExecutor:
                     env=env,
                     capture_output=True,
                     text=True,
-                    timeout=60
+                    timeout=180
                 )
-                
+
                 if result.returncode != 0:
+                    logger.error("skill=%s stderr=%s", self.skill.name, result.stderr)
                     raise RuntimeError(f"Erreur d'exécution : {result.stderr}")
-                
-                # Chercher les fichiers générés (PDF, DOCX, etc.)
-                generated_files = []
-                for root, dirs, files in os.walk(skill_root):
-                    for file in files:
-                        file_path = Path(root) / file
-                        # Ignorer les fichiers originaux du skill
-                        relative_path = file_path.relative_to(skill_root)
-                        if str(relative_path) not in self.files:
-                            generated_files.append(file_path)
-                
-                # Chercher aussi dans le dossier de sortie spécifié
-                if Path(output_path).exists():
-                    output_file = Path(output_path)
-                    if output_file.suffix.lower() == '.pdf':
-                        with open(output_file, 'rb') as f:
-                            pdf_content = f.read()
-                        return {
-                            'content': pdf_content,
-                            'content_type': 'application/pdf',
-                            'output_type': 'pdf',
-                        }
-                    elif output_file.suffix.lower() == '.docx':
-                        with open(output_file, 'rb') as f:
-                            docx_content = f.read()
-                        return {
-                            'content': docx_content,
-                            'content_type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                            'output_type': 'docx',
-                        }
-                
-                # Priorité aux fichiers PDF dans skill_root
-                pdf_files = [f for f in generated_files if f.suffix.lower() == '.pdf']
+
+                # Inventorier les livrables : d'abord le dossier de sortie (le
+                # pipeline y écrit le DOCX *et* le PDF converti, souvent sous un
+                # autre nom que --output), puis les fichiers apparus dans le skill.
+                candidates = []
+                out_dir = Path(output_path).parent
+                if out_dir.is_dir():
+                    candidates.extend(p for p in out_dir.rglob('*') if p.is_file())
+                for path_obj in skill_root.rglob('*'):
+                    if not path_obj.is_file():
+                        continue
+                    # Ignorer les fichiers d'origine du skill
+                    if path_obj.relative_to(skill_root).as_posix() in self.files:
+                        continue
+                    candidates.append(path_obj)
+
+                logger.info("livrables=%s", [str(p) for p in candidates])
+
+                # PDF prioritaire, puis DOCX (le plus récent d'abord).
+                def _newest(paths):
+                    return sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)[0]
+
+                pdf_files = [p for p in candidates if p.suffix.lower() == '.pdf']
                 if pdf_files:
-                    pdf_file = pdf_files[0]
-                    with open(pdf_file, 'rb') as f:
-                        pdf_content = f.read()
+                    chosen = _newest(pdf_files)
+                    logger.info("livrable_retenu=%s (pdf)", chosen)
                     return {
-                        'content': pdf_content,
+                        'content': chosen.read_bytes(),
                         'content_type': 'application/pdf',
                         'output_type': 'pdf',
+                        'filename': chosen.name,
                     }
-                
-                # Sinon, chercher DOCX
-                docx_files = [f for f in generated_files if f.suffix.lower() == '.docx']
+
+                docx_files = [p for p in candidates if p.suffix.lower() == '.docx']
                 if docx_files:
-                    docx_file = docx_files[0]
-                    with open(docx_file, 'rb') as f:
-                        docx_content = f.read()
+                    chosen = _newest(docx_files)
+                    logger.info("livrable_retenu=%s (docx)", chosen)
                     return {
-                        'content': docx_content,
+                        'content': chosen.read_bytes(),
                         'content_type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                         'output_type': 'docx',
+                        'filename': chosen.name,
                     }
                 
                 # Sinon, retourner stdout

@@ -87,7 +87,8 @@ def get_definition(name):
     except Exception:
         return None
     files = [
-        {'path': f.path, 'content_type': f.content_type, 'size': len(f.content or '')}
+        {'path': f.path, 'content_type': f.content_type, 'size': f.size,
+         'is_binary': f.is_binary}
         for f in d.files.all()
     ]
     return {
@@ -112,7 +113,18 @@ def get_skill_file(name, path):
         f = SkillFile.objects.get(skill=skill, path=path)
     except Exception:
         return None
-    return {'path': f.path, 'content_type': f.content_type, 'content': f.content}
+    if f.is_binary:
+        # Ressource binaire (logo, modèle DOCX…) : on ne renvoie pas les octets
+        # à l'agent, seulement sa présence. Le script du skill y accède
+        # directement sur disque lors de l'exécution.
+        return {
+            'path': f.path, 'content_type': f.content_type, 'is_binary': True,
+            'size': f.size, 'content': None,
+            'note': "Ressource binaire disponible pour le skill à l'exécution "
+                    "(non transmise sous forme de texte).",
+        }
+    return {'path': f.path, 'content_type': f.content_type, 'is_binary': False,
+            'size': f.size, 'content': f.content}
 
 
 # --- Skills fournis par défaut ---------------------------------------------

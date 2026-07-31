@@ -213,7 +213,7 @@ def skills_list(request):
             'name': s.name, 'description': s.description, 'category': s.category,
             'kind': s.kind, 'is_orchestrator': s.is_orchestrator, 'is_active': s.is_active,
             'updated_at': s.updated_at.isoformat() if s.updated_at else None,
-            'files': [{'path': f.path, 'content_type': f.content_type, 'size': len(f.content or '')}
+            'files': [{'path': f.path, 'content_type': f.content_type, 'size': f.size, 'is_binary': f.is_binary}
                       for f in s.files.all()],
         })
     return JsonResponse({'skills': data, 'orchestrator_active': skills_registry.orchestrator_active()})
@@ -245,7 +245,8 @@ def orchestrator_active(request):
                 'updated_at': orchestrator.updated_at.isoformat() if orchestrator.updated_at else None,
                 'origin': 'imported',  # Peut être étendu pour 'default' plus tard
                 'files': [
-                    {'path': f.path, 'content_type': f.content_type, 'size': len(f.content or '')}
+                    {'path': f.path, 'content_type': f.content_type, 'size': f.size,
+                     'is_binary': f.is_binary}
                     for f in orchestrator.files.all()
                 ],
                 'instructions': orchestrator.entry_instructions,
@@ -300,8 +301,27 @@ _CT_BY_EXT = {
     '.txt': 'text/plain', '.json': 'application/json', '.csv': 'text/csv',
     '.py': 'text/x-python', '.js': 'text/javascript', '.css': 'text/css',
     '.svg': 'image/svg+xml', '.yaml': 'text/yaml', '.yml': 'text/yaml',
+    # Ressources binaires des skills (logos, modèles de documents…)
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp', '.gif': 'image/gif', '.ico': 'image/x-icon',
+    '.pdf': 'application/pdf',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2',
 }
-_MAX_IMPORT_FILE = 1_000_000
+# 10 Mo : les modèles DOCX et logos dépassent souvent 1 Mo.
+_MAX_IMPORT_FILE = 10_000_000
+
+# Extensions toujours traitées comme binaires : un round-trip texte pourrait les
+# corrompre silencieusement (modèles DOCX, images, polices…).
+_BINARY_EXTS = {
+    '.png', '.jpg', '.jpeg', '.webp', '.gif', '.ico', '.bmp', '.tiff',
+    '.pdf', '.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.odt', '.ods',
+    '.zip', '.gz', '.tar', '.7z', '.rar',
+    '.ttf', '.otf', '.woff', '.woff2', '.eot',
+    '.mp3', '.mp4', '.wav', '.avi', '.mov', '.so', '.dll', '.exe',
+}
 
 
 def _clean_zip_path(p):
@@ -329,7 +349,7 @@ def skill_import(request):
     category = request.POST.get('category', '')
     fname = up.name or 'skill'
 
-    files = []  # (path, content)
+    files = []  # (path, content_texte_ou_None, contenu_binaire_ou_None)
     if fname.lower().endswith('.zip'):
         try:
             z = zipfile.ZipFile(io.BytesIO(up.read()))
@@ -337,7 +357,7 @@ def skill_import(request):
             return JsonResponse({'error': 'Fichier ZIP invalide ou corrompu'}, status=400)
         except Exception as e:
             return JsonResponse({'error': f'Erreur lors de la lecture du ZIP: {str(e)}'}, status=400)
-        
+
         for member in z.namelist():
             if member.endswith('/'):
                 continue
@@ -346,31 +366,42 @@ def skill_import(request):
                 continue
             try:
                 data = z.read(member)
-                content = data.decode('utf-8')
             except Exception:
-                continue  # binaire / illisible : ignoré
-            if len(content.encode('utf-8')) > _MAX_IMPORT_FILE:
+                continue  # membre illisible
+            if len(data) > _MAX_IMPORT_FILE:
                 continue
-            files.append((cp, content))
-        
+            # Les ressources binaires (logos PNG/WEBP, modèles DOCX…) doivent être
+            # conservées : sans elles le pipeline du skill échoue à l'exécution.
+            if os.path.splitext(cp)[1].lower() in _BINARY_EXTS:
+                files.append((cp, None, data))
+                continue
+            try:
+                text = data.decode('utf-8')
+            except UnicodeDecodeError:
+                files.append((cp, None, data))
+            else:
+                files.append((cp, text, None))
+
         if not files:
-            return JsonResponse({'error': 'Le fichier ZIP ne contient aucun fichier texte exploitable'}, status=400)
-        
-        # Retire un dossier racine commun (ex: "mon_skill/SKILL.md" -> "SKILL.md")
-        tops = {p.split('/')[0] for p, _ in files if '/' in p}
-        if files and len(tops) == 1 and all('/' in p for p, _ in files):
-            root = tops.pop()
-            files = [(p[len(root) + 1:], c) for p, c in files]
-        
+            return JsonResponse({'error': 'Le fichier ZIP ne contient aucun fichier exploitable'}, status=400)
+
+        # Retire un dossier racine commun (ex: "mon_skill/SKILL.md" -> "SKILL.md").
+        # `root_name` est mémorisé AVANT de vider l'ensemble, pour pouvoir encore
+        # nommer le skill d'après le dossier racine.
+        tops = {p.split('/')[0] for p, _t, _b in files if '/' in p}
+        root_name = next(iter(tops)) if len(tops) == 1 else None
+        if root_name and all('/' in p for p, _t, _b in files):
+            files = [(p[len(root_name) + 1:], t, b) for p, t, b in files]
+
         if not name:
             # Utiliser le nom du dossier racine ou le nom du fichier ZIP
-            name = tops.pop() if tops else _clean_zip_path(fname)[:-4] or 'skill'
-        
-        # Extraire automatiquement le nom et la description depuis SKILL.md si disponible
+            name = root_name or _clean_zip_path(fname)[:-4] or 'skill'
+
+        # Extraire automatiquement la description depuis SKILL.md si disponible
         skill_md_content = None
-        for p, c in files:
+        for p, t, _b in files:
             if p.lower() == 'skill.md':
-                skill_md_content = c
+                skill_md_content = t
                 break
         
         if skill_md_content and not description:
@@ -395,7 +426,7 @@ def skill_import(request):
     else:
         content = up.read().decode('utf-8', errors='replace')
         path = 'SKILL.md' if fname.lower().endswith(('.md', '.markdown')) else fname
-        files = [(path, content)]
+        files = [(path, content, None)]
         if not name:
             name = fname.rsplit('.', 1)[0]
         
@@ -411,7 +442,7 @@ def skill_import(request):
     if not name:
         return JsonResponse({'error': 'Nom requis'}, status=400)
     if not files:
-        return JsonResponse({'error': 'Aucun fichier texte exploitable dans l\'archive'}, status=400)
+        return JsonResponse({'error': 'Aucun fichier exploitable dans l\'archive'}, status=400)
 
     skill, _ = Skill.objects.update_or_create(
         name=name,
@@ -422,19 +453,32 @@ def skill_import(request):
         },
     )
     skill.files.all().delete()
-    for p, c in files:
+    binary_count = 0
+    for p, text, blob in files:
         ext = os.path.splitext(p)[1].lower()
-        SkillFile.objects.create(skill=skill, path=p, content=c,
-                                 content_type=_CT_BY_EXT.get(ext, 'text/plain'))
-    
+        default_ct = _CT_BY_EXT.get(ext)
+        if blob is not None:
+            binary_count += 1
+            SkillFile.objects.create(
+                skill=skill, path=p, content='', content_binary=blob, is_binary=True,
+                content_type=default_ct or 'application/octet-stream',
+            )
+        else:
+            SkillFile.objects.create(
+                skill=skill, path=p, content=text or '', is_binary=False,
+                content_type=default_ct or 'text/plain',
+            )
+
     return JsonResponse({
-        'ok': True, 
-        'name': name, 
+        'ok': True,
+        'name': name,
         'is_orchestrator': is_orch,
         'description': description,
         'category': category,
-        'files': [p for p, _ in files],
-        'message': f'Skill "{name}" importé avec succès ({len(files)} fichiers)'
+        'files': [p for p, _t, _b in files],
+        'binary_files': binary_count,
+        'message': f'Skill "{name}" importé avec succès '
+                   f'({len(files)} fichiers, dont {binary_count} binaires)'
     })
 
 
@@ -449,7 +493,9 @@ def skill_detail(request, name):
         'name': s.name, 'description': s.description, 'category': s.category,
         'kind': s.kind, 'is_orchestrator': s.is_orchestrator, 'is_active': s.is_active,
         'instructions': s.entry_instructions,
-        'files': [{'path': f.path, 'content_type': f.content_type, 'content': f.content}
+        'files': [{'path': f.path, 'content_type': f.content_type,
+                   'is_binary': f.is_binary, 'size': f.size,
+                   'content': (f'[fichier binaire — {f.size} octets]' if f.is_binary else f.content)}
                   for f in s.files.all()],
     })
 
