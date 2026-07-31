@@ -314,69 +314,59 @@ class SkillRunView(ReadView):
             return _bad(e)
         
         if not skill:
-            # Skill de base de données : essayer de l'exécuter comme template
+            # Skill de base de données : utiliser le nouveau moteur d'exécution
             definition = skills_registry.get_definition(name)
             if not definition:
                 raise NotFound(f"Skill inconnu : {name}")
             
-            # Si le skill est de la base de données, essayer de générer un artefact
+            # Si le skill est de la base de données, utiliser l'exécuteur
             if definition.get('source') == 'db':
                 task = SkillTask.objects.create(
                     client=client if getattr(client, 'pk', None) else None,
                     skill=name, params=params, status='running',
                 )
                 try:
-                    # Générer le contenu en utilisant les fichiers du skill
-                    from .models import Skill, SkillFile
+                    from .models import Skill
+                    from .skill_executor import SkillExecutor
+                    
                     skill_obj = Skill.objects.get(name=name, is_active=True)
+                    executor = SkillExecutor(skill_obj, params)
+                    result = executor.execute()
                     
-                    # Chercher un fichier template principal (ex: template.html, template.md)
-                    template_file = skill_obj.files.filter(
-                        path__icontains='template'
-                    ).first()
+                    # Créer un artefact avec le contenu généré
+                    from .models import Artifact
                     
-                    if not template_file:
-                        # Sinon, prendre le premier fichier non-MD
-                        template_file = skill_obj.files.filter(
-                            path__iendswith='.html'
-                        ).first()
-                    
-                    if not template_file:
-                        # Sinon, prendre SKILL.md
-                        template_file = skill_obj.files.filter(
-                            path__iexact='SKILL.md'
-                        ).first()
-                    
-                    if template_file:
-                        content = template_file.content
-                        # Remplacer les paramètres dans le template
-                        for key, value in params.items():
-                            content = content.replace(f'{{{key}}}', str(value))
-                        
-                        # Créer un artefact avec le contenu généré
-                        from .models import Artifact
-                        artifact = Artifact.objects.create(
-                            name=f"{name}_output",
-                            content_type=template_file.content_type,
-                            content=content,
-                            client=client if getattr(client, 'pk', None) else None,
-                        )
-                        
-                        # Générer l'URL publique
-                        base = getattr(settings, 'OPENAPI_BASE_URL', '') or f"{request.scheme}://{request.get_host()}"
-                        url = f"{base}/a/{artifact.slug}"
-                        
-                        task.status = 'succeeded'
-                        task.result = {
-                            'artifact': artifact.slug,
-                            'url': url,
-                            'content_type': artifact.content_type,
-                        }
-                        audit(request, 'skill.run', name, detail={'task': str(task.id)})
+                    # Si le contenu est binaire (PDF), le stocker en base64
+                    content = result['content']
+                    if isinstance(content, bytes):
+                        import base64
+                        content = base64.b64encode(content).decode('utf-8')
+                        is_binary = True
                     else:
-                        task.status = 'failed'
-                        task.error = "Aucun fichier template trouvé dans le skill"
-                        audit(request, 'skill.run', name, 'error', {'task': str(task.id), 'error': task.error})
+                        is_binary = False
+                    
+                    artifact = Artifact.objects.create(
+                        name=f"{name}_output",
+                        content_type=result['content_type'],
+                        content=content,
+                        client=client if getattr(client, 'pk', None) else None,
+                    )
+                    
+                    # Générer l'URL publique
+                    base = getattr(settings, 'OPENAPI_BASE_URL', '') or f"{request.scheme}://{request.get_host()}"
+                    url = f"{base}/a/{artifact.slug}"
+                    
+                    task.status = 'succeeded'
+                    task.result = {
+                        'artifact': artifact.slug,
+                        'url': url,
+                        'content_type': result['content_type'],
+                        'output_type': result.get('output_type', 'unknown'),
+                        'is_binary': is_binary,
+                    }
+                    if 'warning' in result:
+                        task.result['warning'] = result['warning']
+                    audit(request, 'skill.run', name, detail={'task': str(task.id)})
                 except Exception as e:
                     task.status = 'failed'
                     task.error = str(e)

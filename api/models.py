@@ -93,6 +93,10 @@ class Skill(models.Model):
     instructions = models.TextField(blank=True, default='')
     # Exemple d'entrée (paramètres attendus), pour guider l'agent.
     input_example = models.JSONField(null=True, blank=True)
+    # Point d'entrée du skill (fichier principal à exécuter, ex: generator.py, template.html)
+    entry_point = models.CharField(max_length=255, blank=True, default='')
+    # Type de sortie attendu (html, pdf, markdown, json, etc.)
+    output_type = models.CharField(max_length=50, blank=True, default='html')
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
