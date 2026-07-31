@@ -107,8 +107,26 @@ class SkillExecutor:
             # Paramètres booléens qui n'ont pas de valeur
             boolean_params = {'pdf', 'docx', 'html', 'markdown'}
             
+            # Générer automatiquement un chemin de sortie si non fourni
+            output_path = self.params.get('output')
+            if not output_path:
+                # Créer un dossier de sortie temporaire
+                import uuid
+                task_id = str(uuid.uuid4())[:8]
+                output_dir = Path('/tmp/datahub-skills') / self.skill.name / task_id
+                output_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Générer un nom de fichier sécurisé
+                document_type = self.params.get('document_type', 'document').replace('_', '-')
+                output_filename = f"{document_type}.docx"
+                output_path = str(output_dir / output_filename)
+            
             # Construire les arguments de ligne de commande
             args = ['python', str(Path(tmpdir) / entry_point)]
+            
+            # Ajouter le chemin de sortie
+            args.append('--output')
+            args.append(output_path)
             
             # Ajouter les paramètres comme arguments
             for key, value in self.params.items():
@@ -127,8 +145,8 @@ class SkillExecutor:
                 # Gestion des paramètres booléens
                 elif key in boolean_params or (isinstance(value, bool) and value):
                     args.append(f'--{cli_key}')
-                # Gestion des paramètres avec valeur
-                elif value is not None and value != '':
+                # Gestion des paramètres avec valeur (sauf output déjà ajouté)
+                elif key != 'output' and value is not None and value != '':
                     args.append(f'--{cli_key}')
                     args.append(str(value))
             
@@ -161,7 +179,27 @@ class SkillExecutor:
                         if str(relative_path) not in self.files:
                             generated_files.append(file_path)
                 
-                # Priorité aux fichiers PDF
+                # Chercher aussi dans le dossier de sortie spécifié
+                if Path(output_path).exists():
+                    output_file = Path(output_path)
+                    if output_file.suffix.lower() == '.pdf':
+                        with open(output_file, 'rb') as f:
+                            pdf_content = f.read()
+                        return {
+                            'content': pdf_content,
+                            'content_type': 'application/pdf',
+                            'output_type': 'pdf',
+                        }
+                    elif output_file.suffix.lower() == '.docx':
+                        with open(output_file, 'rb') as f:
+                            docx_content = f.read()
+                        return {
+                            'content': docx_content,
+                            'content_type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                            'output_type': 'docx',
+                        }
+                
+                # Priorité aux fichiers PDF dans tmpdir
                 pdf_files = [f for f in generated_files if f.suffix.lower() == '.pdf']
                 if pdf_files:
                     pdf_file = pdf_files[0]
