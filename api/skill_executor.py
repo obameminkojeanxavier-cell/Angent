@@ -92,17 +92,44 @@ class SkillExecutor:
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 file_path.write_text(file_obj.content)
             
+            # Mapping des paramètres vers les arguments CLI
+            param_mapping = {
+                'content': 'text',
+                'document_type': 'document-type',
+                'entity': 'entity',
+                'title': 'title',
+                'subtitle': 'subtitle',
+                'date': 'date',
+                'template': 'template',
+                'output': 'output',
+            }
+            
+            # Paramètres booléens qui n'ont pas de valeur
+            boolean_params = {'pdf', 'docx', 'html', 'markdown'}
+            
             # Construire les arguments de ligne de commande
             args = ['python', str(Path(tmpdir) / entry_point)]
             
             # Ajouter les paramètres comme arguments
             for key, value in self.params.items():
+                # Mapping des noms de paramètres
+                cli_key = param_mapping.get(key, key)
+                
+                # Gestion des formats de sortie
                 if key == 'output_format' and value == 'pdf':
                     args.append('--pdf')
                 elif key == 'output_format' and value == 'docx':
                     args.append('--docx')
-                else:
-                    args.append(f'--{key}')
+                elif key == 'output_format' and value == 'html':
+                    args.append('--html')
+                elif key == 'output_format' and value == 'markdown':
+                    args.append('--markdown')
+                # Gestion des paramètres booléens
+                elif key in boolean_params or (isinstance(value, bool) and value):
+                    args.append(f'--{cli_key}')
+                # Gestion des paramètres avec valeur
+                elif value is not None and value != '':
+                    args.append(f'--{cli_key}')
                     args.append(str(value))
             
             # Préparer les variables d'environnement
