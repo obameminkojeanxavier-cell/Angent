@@ -46,8 +46,12 @@ class SkillExecutor:
     
     def _detect_entry_point(self):
         """Détecte automatiquement le point d'entrée du skill."""
-        # Priorité : generator.py > main.py > template.html > index.html > SKILL.md
+        # Priorité : scripts/*.py > generator.py > main.py > template.html > index.html > SKILL.md
         candidates = [
+            'scripts/bfev_pipeline.py',
+            'scripts/pipeline.py',
+            'scripts/generator.py',
+            'scripts/main.py',
             'generator.py',
             'main.py',
             'run.py',
@@ -61,6 +65,11 @@ class SkillExecutor:
         for candidate in candidates:
             if candidate in self.files:
                 return candidate
+        
+        # Chercher n'importe quel script dans scripts/
+        for path in sorted(self.files.keys()):
+            if path.startswith('scripts/') and path.endswith('.py'):
+                return path
         
         # Sinon, prendre le premier fichier non-MD
         for path in sorted(self.files.keys()):
@@ -83,29 +92,74 @@ class SkillExecutor:
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 file_path.write_text(file_obj.content)
             
-            # Préparer les paramètres comme variables d'environnement
+            # Construire les arguments de ligne de commande
+            args = ['python', str(Path(tmpdir) / entry_point)]
+            
+            # Ajouter les paramètres comme arguments
+            for key, value in self.params.items():
+                if key == 'output_format' and value == 'pdf':
+                    args.append('--pdf')
+                elif key == 'output_format' and value == 'docx':
+                    args.append('--docx')
+                else:
+                    args.append(f'--{key}')
+                    args.append(str(value))
+            
+            # Préparer les variables d'environnement
             env = os.environ.copy()
             for key, value in self.params.items():
                 env[f'SKILL_{key.upper()}'] = str(value)
             
             # Exécuter le script
-            script_path = Path(tmpdir) / entry_point
             try:
                 result = subprocess.run(
-                    ['python', str(script_path)],
+                    args,
                     cwd=tmpdir,
                     env=env,
                     capture_output=True,
                     text=True,
-                    timeout=30
+                    timeout=60
                 )
                 
                 if result.returncode != 0:
                     raise RuntimeError(f"Erreur d'exécution : {result.stderr}")
                 
-                output = result.stdout
+                # Chercher les fichiers générés (PDF, DOCX, etc.)
+                generated_files = []
+                for root, dirs, files in os.walk(tmpdir):
+                    for file in files:
+                        file_path = Path(root) / file
+                        # Ignorer les fichiers originaux du skill
+                        relative_path = file_path.relative_to(tmpdir)
+                        if str(relative_path) not in self.files:
+                            generated_files.append(file_path)
                 
-                # Déterminer le type de sortie
+                # Priorité aux fichiers PDF
+                pdf_files = [f for f in generated_files if f.suffix.lower() == '.pdf']
+                if pdf_files:
+                    pdf_file = pdf_files[0]
+                    with open(pdf_file, 'rb') as f:
+                        pdf_content = f.read()
+                    return {
+                        'content': pdf_content,
+                        'content_type': 'application/pdf',
+                        'output_type': 'pdf',
+                    }
+                
+                # Sinon, chercher DOCX
+                docx_files = [f for f in generated_files if f.suffix.lower() == '.docx']
+                if docx_files:
+                    docx_file = docx_files[0]
+                    with open(docx_file, 'rb') as f:
+                        docx_content = f.read()
+                    return {
+                        'content': docx_content,
+                        'content_type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        'output_type': 'docx',
+                    }
+                
+                # Sinon, retourner stdout
+                output = result.stdout
                 output_type = self._detect_output_type(output)
                 
                 return {
