@@ -8,6 +8,7 @@ formats (HTML, PDF, Markdown, JSON, etc.).
 """
 import os
 import re
+import sys
 import tempfile
 import subprocess
 import zipfile
@@ -204,8 +205,12 @@ class SkillExecutor:
                     f"Script introuvable : {entry_point} (racine détectée : {skill_root})"
                 )
 
-            # Construire les arguments de ligne de commande
-            args = ['python', str(script_path)]
+            # Construire les arguments de ligne de commande.
+            # `sys.executable` = l'interpréteur qui fait tourner DataHub (celui du
+            # venv). Indispensable : sous systemd le venv n'est pas activé, donc
+            # « python » n'existe pas, et « python3 » serait l'interpréteur système
+            # dépourvu des dépendances du skill (PyYAML, python-docx…).
+            args = [sys.executable, str(script_path)]
             
             # Ajouter le chemin de sortie (obligatoire selon bfev_pipeline.py)
             args.append('--output')
