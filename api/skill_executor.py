@@ -170,17 +170,20 @@ class SkillExecutor:
             # Paramètres booléens qui n'ont pas de valeur (selon bfev_pipeline.py)
             boolean_params = {'pdf', 'analyze_only', 'no_cache'}
             
-            # Générer automatiquement un chemin de sortie si non fourni
+            # Générer automatiquement un chemin de sortie si non fourni.
             output_path = self.params.get('output')
             if not output_path:
-                # Créer un dossier de sortie temporaire
-                import uuid
-                task_id = str(uuid.uuid4())[:8]
-                output_dir = Path('/tmp/datahub-skills') / self.skill.name / task_id
+                # Le dossier de sortie vit DANS le répertoire temporaire de cette
+                # exécution : il est créé par le processus courant (donc pas de
+                # « Permission denied » quand root et www-data se partagent un
+                # chemin fixe comme /tmp/datahub-skills) et il est supprimé
+                # automatiquement à la fin — pas d'accumulation sur le disque.
+                output_dir = tmpdir_path / '_datahub_output'
                 output_dir.mkdir(parents=True, exist_ok=True)
-                
+
                 # Générer un nom de fichier sécurisé
                 document_type = self.params.get('document_type', 'document').replace('_', '-')
+                document_type = re.sub(r'[^A-Za-z0-9._-]', '-', document_type) or 'document'
                 output_filename = f"{document_type}.docx"
                 output_path = str(output_dir / output_filename)
             
@@ -228,6 +231,17 @@ class SkillExecutor:
             env = os.environ.copy()
             for key, value in self.params.items():
                 env[f'SKILL_{key.upper()}'] = str(value)
+
+            # LibreOffice (conversion DOCX -> PDF) exige un HOME inscriptible pour
+            # créer son profil utilisateur. Sous www-data, le HOME système ne l'est
+            # pas forcément : on lui en fournit un, jetable, dans le tmpdir.
+            home_dir = tmpdir_path / '_home'
+            (home_dir / '.config').mkdir(parents=True, exist_ok=True)
+            (home_dir / '.cache').mkdir(parents=True, exist_ok=True)
+            env['HOME'] = str(home_dir)
+            env['XDG_CONFIG_HOME'] = str(home_dir / '.config')
+            env['XDG_CACHE_HOME'] = str(home_dir / '.cache')
+            env.setdefault('TMPDIR', str(tmpdir_path))
             
             # Journaliser la commande exacte, le cwd et la sortie attendue.
             logger.info("script=%s cwd=%s output=%s", script_path, skill_root, output_path)
@@ -260,8 +274,13 @@ class SkillExecutor:
                 for path_obj in skill_root.rglob('*'):
                     if not path_obj.is_file():
                         continue
-                    # Ignorer les fichiers d'origine du skill
-                    if path_obj.relative_to(skill_root).as_posix() in self.files:
+                    rel = path_obj.relative_to(skill_root).as_posix()
+                    # Ignorer les fichiers d'origine du skill…
+                    if rel in self.files:
+                        continue
+                    # …ainsi que nos dossiers internes (profil LibreOffice, et la
+                    # sortie déjà inventoriée ci-dessus).
+                    if rel.startswith(('_home/', '_datahub_output/', '__pycache__/')):
                         continue
                     candidates.append(path_obj)
 
