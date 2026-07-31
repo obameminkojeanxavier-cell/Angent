@@ -92,7 +92,7 @@ class SkillExecutor:
                 file_path.parent.mkdir(parents=True, exist_ok=True)
                 file_path.write_text(file_obj.content)
             
-            # Mapping des paramètres vers les arguments CLI
+            # Mapping des paramètres vers les arguments CLI (selon bfev_pipeline.py)
             param_mapping = {
                 'content': 'text',
                 'document_type': 'document-type',
@@ -101,11 +101,14 @@ class SkillExecutor:
                 'subtitle': 'subtitle',
                 'date': 'date',
                 'template': 'template',
-                'output': 'output',
+                'logo': 'logo',
+                'format': 'format',
+                'catalog': 'catalog',
+                'entity_catalog': 'entity-catalog',
             }
             
-            # Paramètres booléens qui n'ont pas de valeur
-            boolean_params = {'pdf', 'docx', 'html', 'markdown'}
+            # Paramètres booléens qui n'ont pas de valeur (selon bfev_pipeline.py)
+            boolean_params = {'pdf', 'analyze_only', 'no_cache'}
             
             # Générer automatiquement un chemin de sortie si non fourni
             output_path = self.params.get('output')
@@ -124,7 +127,7 @@ class SkillExecutor:
             # Construire les arguments de ligne de commande
             args = ['python', str(Path(tmpdir) / entry_point)]
             
-            # Ajouter le chemin de sortie
+            # Ajouter le chemin de sortie (obligatoire selon bfev_pipeline.py)
             args.append('--output')
             args.append(output_path)
             
@@ -133,15 +136,9 @@ class SkillExecutor:
                 # Mapping des noms de paramètres
                 cli_key = param_mapping.get(key, key)
                 
-                # Gestion des formats de sortie
+                # Gestion des formats de sortie (convertir en flag --pdf)
                 if key == 'output_format' and value == 'pdf':
                     args.append('--pdf')
-                elif key == 'output_format' and value == 'docx':
-                    args.append('--docx')
-                elif key == 'output_format' and value == 'html':
-                    args.append('--html')
-                elif key == 'output_format' and value == 'markdown':
-                    args.append('--markdown')
                 # Gestion des paramètres booléens
                 elif key in boolean_params or (isinstance(value, bool) and value):
                     args.append(f'--{cli_key}')
@@ -154,6 +151,11 @@ class SkillExecutor:
             env = os.environ.copy()
             for key, value in self.params.items():
                 env[f'SKILL_{key.upper()}'] = str(value)
+            
+            # Afficher la commande pour débogage
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"Executing skill {self.skill.name} with command: {' '.join(args)}")
             
             # Exécuter le script
             try:
