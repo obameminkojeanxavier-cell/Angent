@@ -36,6 +36,12 @@ urlpatterns = [
     path('manage/api/agents/create', mng.agent_create),
     path('manage/api/agents/<int:agent_id>/update', mng.agent_update),
     path('manage/api/agents/<int:agent_id>/delete', mng.agent_delete),
+    # Agents IA externes (DeepSeek, OpenAI…) : clé API et permissions
+    path('manage/api/ai', mng.ai_list),
+    path('manage/api/ai/save', mng.ai_save),
+    path('manage/api/ai/<int:provider_id>/test', mng.ai_test),
+    path('manage/api/ai/<int:provider_id>/delete', mng.ai_delete),
+
     path('manage/api/skills', mng.skills_list),
     path('manage/api/skills/create', mng.skill_create),
     path('manage/api/skills/import', mng.skill_import),

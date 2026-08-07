@@ -1,6 +1,17 @@
 from django.contrib import admin
 
-from .models import AgentClient, SkillTask, AuditLog, Skill, SkillFile, Artifact
+from .models import (
+    AgentClient, SkillTask, AuditLog, Skill, SkillFile, Artifact, AIProvider,
+)
+
+
+@admin.register(AIProvider)
+class AIProviderAdmin(admin.ModelAdmin):
+    list_display = ('name', 'provider', 'role', 'model', 'is_active',
+                    'can_apply_changes', 'last_used_at')
+    list_filter = ('provider', 'role', 'is_active')
+    search_fields = ('name', 'description', 'model')
+    readonly_fields = ('created_at', 'updated_at', 'last_used_at')
 
 
 class SkillFileInline(admin.TabularInline):

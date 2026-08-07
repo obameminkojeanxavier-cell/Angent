@@ -116,6 +116,66 @@ class Skill(models.Model):
         return self.instructions
 
 
+class AIProvider(models.Model):
+    """
+    Configuration d'un agent IA externe (DeepSeek, OpenAI, Anthropic, Ollama…)
+    que la plateforme appelle elle-même — par opposition à AgentClient, qui
+    décrit un agent qui appelle la plateforme.
+
+    Sert à l'agent système : analyse, surveillance, propositions d'amélioration.
+    La clé API est stockée ici et n'est JAMAIS renvoyée par l'API d'administration
+    (seul un masque du type « sk-…1234 » est exposé).
+    """
+
+    ROLE_CHOICES = [
+        ('system', 'Agent système (analyse / optimisation)'),
+        ('assistant', 'Assistant (aide à la rédaction, résumés)'),
+        ('reviewer', 'Relecteur (contrôle qualité, conformité)'),
+        ('other', 'Autre'),
+    ]
+
+    name = models.CharField(max_length=100, unique=True)
+    provider = models.CharField(max_length=50, default='deepseek')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='system')
+    description = models.CharField(max_length=255, blank=True, default='')
+    base_url = models.CharField(max_length=255, default='https://api.deepseek.com')
+    model = models.CharField(max_length=100, default='deepseek-chat')
+    api_key = models.TextField(blank=True, default='')
+    is_active = models.BooleanField(default=True)
+
+    # Périmètre d'action : ce que cet agent IA est autorisé à faire dans le
+    # système. « propose » = il rédige des recommandations ; l'application des
+    # changements reste soumise à validation humaine.
+    can_read_data = models.BooleanField(default=True)
+    can_read_audit = models.BooleanField(default=True)
+    can_propose_changes = models.BooleanField(default=True)
+    can_apply_changes = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return f'{self.name} ({self.provider})'
+
+    @property
+    def key_masked(self):
+        """Aperçu non sensible de la clé, pour l'affichage dans l'administration."""
+        k = self.api_key or ''
+        if not k:
+            return ''
+        if len(k) <= 8:
+            return '•' * len(k)
+        return f'{k[:4]}…{k[-4:]}'
+
+    @property
+    def has_key(self):
+        return bool(self.api_key)
+
+
 class SkillFile(models.Model):
     """
     Un fichier appartenant à un skill (skill = dossier). Chemin relatif dans le

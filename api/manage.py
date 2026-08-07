@@ -296,6 +296,115 @@ def skill_create(request):
     return JsonResponse({'ok': True, 'name': name})
 
 
+# --- Agents IA externes (DeepSeek, OpenAI…) ---------------------------------
+
+# Réglages par défaut proposés selon le fournisseur choisi.
+AI_PRESETS = {
+    'deepseek': {'base_url': 'https://api.deepseek.com', 'model': 'deepseek-chat'},
+    'openai': {'base_url': 'https://api.openai.com/v1', 'model': 'gpt-4o-mini'},
+    'anthropic': {'base_url': 'https://api.anthropic.com/v1', 'model': 'claude-sonnet-5'},
+    'mistral': {'base_url': 'https://api.mistral.ai/v1', 'model': 'mistral-small-latest'},
+    'ollama': {'base_url': 'http://127.0.0.1:11434/v1', 'model': 'llama3'},
+    'other': {'base_url': '', 'model': ''},
+}
+
+
+def _ai_dict(p):
+    """Représentation sûre : la clé n'est jamais renvoyée en clair."""
+    return {
+        'id': p.id, 'name': p.name, 'provider': p.provider, 'role': p.role,
+        'description': p.description, 'base_url': p.base_url, 'model': p.model,
+        'is_active': p.is_active,
+        'has_key': p.has_key, 'key_masked': p.key_masked,
+        'permissions': {
+            'can_read_data': p.can_read_data,
+            'can_read_audit': p.can_read_audit,
+            'can_propose_changes': p.can_propose_changes,
+            'can_apply_changes': p.can_apply_changes,
+        },
+        'last_used_at': p.last_used_at.isoformat() if p.last_used_at else None,
+    }
+
+
+def ai_list(request):
+    if not _is_staff(request):
+        return _forbidden()
+    from .models import AIProvider
+    return JsonResponse({
+        'providers': [_ai_dict(p) for p in AIProvider.objects.all()],
+        'presets': AI_PRESETS,
+    })
+
+
+@require_POST
+def ai_save(request):
+    """Crée ou met à jour un agent IA. La clé n'est écrasée que si fournie."""
+    if not _is_staff(request):
+        return _forbidden()
+    from .models import AIProvider
+    body = json.loads(request.body or '{}')
+    name = (body.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'error': 'Nom requis'}, status=400)
+
+    provider = (body.get('provider') or 'deepseek').strip().lower()
+    preset = AI_PRESETS.get(provider, AI_PRESETS['other'])
+    perms = body.get('permissions') or {}
+
+    defaults = {
+        'provider': provider,
+        'role': body.get('role') or 'system',
+        'description': body.get('description', ''),
+        'base_url': (body.get('base_url') or preset['base_url']).strip(),
+        'model': (body.get('model') or preset['model']).strip(),
+        'is_active': bool(body.get('is_active', True)),
+        'can_read_data': bool(perms.get('can_read_data', True)),
+        'can_read_audit': bool(perms.get('can_read_audit', True)),
+        'can_propose_changes': bool(perms.get('can_propose_changes', True)),
+        'can_apply_changes': bool(perms.get('can_apply_changes', False)),
+    }
+    obj, created = AIProvider.objects.update_or_create(name=name, defaults=defaults)
+
+    # La clé n'est remplacée que si l'administrateur en saisit une nouvelle :
+    # un champ laissé vide conserve la clé existante.
+    new_key = (body.get('api_key') or '').strip()
+    if new_key:
+        obj.api_key = new_key
+        obj.save(update_fields=['api_key'])
+
+    return JsonResponse({'ok': True, 'created': created, 'provider': _ai_dict(obj)})
+
+
+@require_POST
+def ai_delete(request, provider_id):
+    if not _is_staff(request):
+        return _forbidden()
+    from .models import AIProvider
+    AIProvider.objects.filter(pk=provider_id).delete()
+    return JsonResponse({'ok': True})
+
+
+@require_POST
+def ai_test(request, provider_id):
+    """Vérifie que la clé fonctionne, par un appel réel minimal au fournisseur."""
+    if not _is_staff(request):
+        return _forbidden()
+    from .models import AIProvider
+    try:
+        p = AIProvider.objects.get(pk=provider_id)
+    except AIProvider.DoesNotExist:
+        return JsonResponse({'error': 'Agent IA introuvable'}, status=404)
+    if not p.api_key:
+        return JsonResponse({'error': "Aucune clé API enregistrée pour cet agent."}, status=400)
+
+    from .ai_client import test_connection
+    ok, detail = test_connection(p)
+    if ok:
+        from django.utils import timezone
+        AIProvider.objects.filter(pk=p.pk).update(last_used_at=timezone.now())
+    return JsonResponse({'ok': ok, 'detail': detail}, status=200 if ok else 502)
+
+
 _CT_BY_EXT = {
     '.md': 'text/markdown', '.markdown': 'text/markdown', '.html': 'text/html', '.htm': 'text/html',
     '.txt': 'text/plain', '.json': 'application/json', '.csv': 'text/csv',

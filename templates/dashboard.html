@@ -74,6 +74,7 @@ h2.sec,h3.sec{margin:14px 0 6px;font-size:14px;text-transform:uppercase;letter-s
       <div class="tab active" data-v="overview">Vue d'ensemble</div>
       <div class="tab" data-v="agents">Agents &amp; Droits</div>
       <div class="tab" data-v="skills">Skills</div>
+      <div class="tab" data-v="ai">Agents IA</div>
     </div>
     <div class="small"><a href="/">← Console</a> &nbsp;·&nbsp; <a href="/manage/logout/">Déconnexion</a></div>
   </div>
@@ -200,6 +201,53 @@ h2.sec,h3.sec{margin:14px 0 6px;font-size:14px;text-transform:uppercase;letter-s
     </div>
   </div>
 
+  <!-- AGENTS IA -->
+  <div class="view" id="v-ai">
+    <h2 class="sec">Ajouter / modifier un agent IA</h2>
+    <div class="agent">
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field"><label>Nom (identifiant interne)</label>
+          <input type="text" id="ai-name" placeholder="ex: deepseek-systeme"></div>
+        <div class="field"><label>Fournisseur</label>
+          <select id="ai-provider">
+            <option value="deepseek">DeepSeek</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic (Claude)</option>
+            <option value="mistral">Mistral</option>
+            <option value="ollama">Ollama (local)</option>
+            <option value="other">Autre</option>
+          </select></div>
+        <div class="field"><label>Rôle</label>
+          <select id="ai-role">
+            <option value="system">Agent système (analyse / optimisation)</option>
+            <option value="assistant">Assistant (rédaction, résumés)</option>
+            <option value="reviewer">Relecteur (qualité, conformité)</option>
+            <option value="other">Autre</option>
+          </select></div>
+        <div class="field"><label>Modèle</label>
+          <input type="text" id="ai-model" placeholder="deepseek-chat"></div>
+        <div class="field"><label>URL de base de l'API</label>
+          <input type="text" id="ai-url" placeholder="https://api.deepseek.com"></div>
+        <div class="field"><label>Clé API <span class="small">(laisser vide pour conserver l'actuelle)</span></label>
+          <input type="password" id="ai-key" placeholder="sk-..." autocomplete="new-password"></div>
+      </div>
+      <div class="field"><label>Description</label>
+        <input type="text" id="ai-desc" placeholder="À quoi sert cet agent"></div>
+      <div class="field"><label>Périmètre d'action</label>
+        <div class="scopes">
+          <label><input type="checkbox" id="ai-p1" checked> Lire les données</label>
+          <label><input type="checkbox" id="ai-p2" checked> Lire le journal d'audit</label>
+          <label><input type="checkbox" id="ai-p3" checked> Proposer des améliorations</label>
+          <label><input type="checkbox" id="ai-p4"> Appliquer les changements (déconseillé)</label>
+        </div>
+      </div>
+      <button class="btn" onclick="saveAI()">Enregistrer l'agent IA</button>
+    </div>
+
+    <h2 class="sec">Agents IA configurés</h2>
+    <div id="ai-list"></div>
+  </div>
+
   <!-- Modal consultation -->
   <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:60;padding:30px;overflow:auto">
     <div style="max-width:820px;margin:0 auto;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px">
@@ -234,7 +282,73 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   t.classList.add('active');$('#v-'+t.dataset.v).classList.add('active');
   if(t.dataset.v==='skills')loadSkills();
+  if(t.dataset.v==='ai')loadAI();
 });
+
+/* ---- AGENTS IA (cle API des fournisseurs externes : DeepSeek, etc.) ---- */
+let AI_PRESETS={};
+$('#ai-provider').addEventListener('change',()=>{
+  const p=AI_PRESETS[$('#ai-provider').value];
+  if(p){ if(p.base_url)$('#ai-url').value=p.base_url; if(p.model)$('#ai-model').value=p.model; }
+});
+async function loadAI(){
+  const d=await api('/manage/api/ai');
+  AI_PRESETS=d.presets||{};
+  if(!$('#ai-url').value){const p=AI_PRESETS[$('#ai-provider').value]||{};$('#ai-url').value=p.base_url||'';$('#ai-model').value=p.model||'';}
+  $('#ai-list').innerHTML=(d.providers||[]).map(p=>`
+    <div class="agent"><div class="row">
+      <div class="name">${esc(p.name)}
+        <span class="badge ${p.is_active?'on':'off'}">${p.is_active?'actif':'inactif'}</span>
+        <span class="badge cat" style="background:rgba(106,160,255,.14);color:var(--db)">${esc(p.provider)}</span>
+        ${p.has_key?'<span class="badge on">cle enregistree</span>':'<span class="badge off">sans cle</span>'}
+      </div>
+      <div>
+        <button class="btn ghost" onclick="testAI(${p.id},'${esc(p.name)}')">Tester la connexion</button>
+        <button class="btn ghost" onclick="editAI(${p.id})">Modifier</button>
+        <button class="btn danger" onclick="delAI(${p.id},'${esc(p.name)}')">Supprimer</button>
+      </div></div>
+      <div class="small">${esc(p.description||'')}</div>
+      <div class="small" style="margin-top:6px">
+        modèle : <b>${esc(p.model)}</b> · URL : ${esc(p.base_url)} · clé : <code>${esc(p.key_masked||'—')}</code>
+      </div>
+      <div class="small" style="margin-top:4px">
+        droits : ${Object.entries(p.permissions).filter(([,v])=>v).map(([k])=>esc(k)).join(', ')||'aucun'}
+      </div>
+      <div class="small" id="ai-res-${p.id}" style="margin-top:6px"></div>
+    </div>`).join('')||'<p class="small">Aucun agent IA configuré. Renseigne le formulaire ci-dessus (la clé DeepSeek se met dans « Clé API »).</p>';
+  window.__AI=d.providers||[];
+}
+function editAI(id){
+  const p=(window.__AI||[]).find(x=>x.id===id); if(!p)return;
+  $('#ai-name').value=p.name; $('#ai-provider').value=p.provider; $('#ai-role').value=p.role;
+  $('#ai-model').value=p.model; $('#ai-url').value=p.base_url; $('#ai-desc').value=p.description||'';
+  $('#ai-key').value='';   // on ne réaffiche jamais la clé
+  $('#ai-p1').checked=p.permissions.can_read_data; $('#ai-p2').checked=p.permissions.can_read_audit;
+  $('#ai-p3').checked=p.permissions.can_propose_changes; $('#ai-p4').checked=p.permissions.can_apply_changes;
+  toast('Modifie puis « Enregistrer » (clé vide = inchangée)');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+async function saveAI(){
+  const name=$('#ai-name').value.trim(); if(!name)return toast('Nom requis',false);
+  const body={name,provider:$('#ai-provider').value,role:$('#ai-role').value,
+    model:$('#ai-model').value.trim(),base_url:$('#ai-url').value.trim(),
+    description:$('#ai-desc').value,api_key:$('#ai-key').value,
+    permissions:{can_read_data:$('#ai-p1').checked,can_read_audit:$('#ai-p2').checked,
+      can_propose_changes:$('#ai-p3').checked,can_apply_changes:$('#ai-p4').checked}};
+  try{await api('/manage/api/ai/save','POST',body);
+    $('#ai-key').value=''; toast('Agent IA enregistré ✓'); loadAI(); loadOverview();
+  }catch(e){toast(e.message,false)}
+}
+async function testAI(id,name){
+  const box=$('#ai-res-'+id); box.textContent='Test en cours…'; box.style.color='var(--muted)';
+  try{const d=await api('/manage/api/ai/'+id+'/test','POST',{});
+    box.textContent='✓ '+d.detail; box.style.color='var(--ok)'; toast('Connexion OK : '+name);
+  }catch(e){box.textContent='✕ '+e.message; box.style.color='var(--err)'; toast('Échec : '+e.message,false)}
+}
+async function delAI(id,name){
+  if(!confirm('Supprimer l\'agent IA '+name+' ?'))return;
+  try{await api('/manage/api/ai/'+id+'/delete','POST',{});toast('Supprimé');loadAI();}catch(e){toast(e.message,false)}
+}
 
 async function loadOverview(){
   const d=await api('/manage/api/overview');OVERVIEW=d;
