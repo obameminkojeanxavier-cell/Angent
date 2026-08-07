@@ -143,6 +143,18 @@ class AIProvider(models.Model):
     api_key = models.TextField(blank=True, default='')
     is_active = models.BooleanField(default=True)
 
+    # Instructions principales (prompt système) : définissent le fonctionnement
+    # de l'agent — son rôle, les tâches autorisées, les règles à respecter et sa
+    # manière d'interagir avec les utilisateurs et les autres services.
+    system_prompt = models.TextField(blank=True, default='')
+    # Message utilisé par le système de vérification pour contrôler que l'agent
+    # répond conformément à ses instructions.
+    test_message = models.TextField(
+        blank=True, default='',
+        help_text="Question de contrôle envoyée lors de la vérification.")
+    temperature = models.FloatField(default=0.2)
+    max_tokens = models.IntegerField(default=1024)
+
     # Périmètre d'action : ce que cet agent IA est autorisé à faire dans le
     # système. « propose » = il rédige des recommandations ; l'application des
     # changements reste soumise à validation humaine.

@@ -315,6 +315,9 @@ def _ai_dict(p):
         'id': p.id, 'name': p.name, 'provider': p.provider, 'role': p.role,
         'description': p.description, 'base_url': p.base_url, 'model': p.model,
         'is_active': p.is_active,
+        'system_prompt': p.system_prompt,
+        'test_message': p.test_message,
+        'temperature': p.temperature, 'max_tokens': p.max_tokens,
         'has_key': p.has_key, 'key_masked': p.key_masked,
         'permissions': {
             'can_read_data': p.can_read_data,
@@ -330,9 +333,13 @@ def ai_list(request):
     if not _is_staff(request):
         return _forbidden()
     from .models import AIProvider
+    from .ai_prompts import ROLE_PROMPTS, DEFAULT_TEST_MESSAGE
     return JsonResponse({
         'providers': [_ai_dict(p) for p in AIProvider.objects.all()],
         'presets': AI_PRESETS,
+        # Modèles d'instructions proposés par rôle, pour pré-remplir le formulaire.
+        'role_prompts': ROLE_PROMPTS,
+        'default_test_message': DEFAULT_TEST_MESSAGE,
     })
 
 
@@ -351,6 +358,15 @@ def ai_save(request):
     preset = AI_PRESETS.get(provider, AI_PRESETS['other'])
     perms = body.get('permissions') or {}
 
+    try:
+        temperature = float(body.get('temperature', 0.2))
+    except (TypeError, ValueError):
+        temperature = 0.2
+    try:
+        max_tokens = int(body.get('max_tokens', 1024))
+    except (TypeError, ValueError):
+        max_tokens = 1024
+
     defaults = {
         'provider': provider,
         'role': body.get('role') or 'system',
@@ -358,6 +374,10 @@ def ai_save(request):
         'base_url': (body.get('base_url') or preset['base_url']).strip(),
         'model': (body.get('model') or preset['model']).strip(),
         'is_active': bool(body.get('is_active', True)),
+        'system_prompt': body.get('system_prompt', ''),
+        'test_message': body.get('test_message', ''),
+        'temperature': max(0.0, min(temperature, 2.0)),
+        'max_tokens': max(16, min(max_tokens, 8192)),
         'can_read_data': bool(perms.get('can_read_data', True)),
         'can_read_audit': bool(perms.get('can_read_audit', True)),
         'can_propose_changes': bool(perms.get('can_propose_changes', True)),
@@ -386,7 +406,11 @@ def ai_delete(request, provider_id):
 
 @require_POST
 def ai_test(request, provider_id):
-    """Vérifie que la clé fonctionne, par un appel réel minimal au fournisseur."""
+    """
+    Système de vérification : enchaîne plusieurs contrôles (configuration, clé,
+    instructions, authentification, réponse du modèle) et renvoie un rapport
+    détaillé ainsi que la réponse réelle de l'agent.
+    """
     if not _is_staff(request):
         return _forbidden()
     from .models import AIProvider
@@ -394,15 +418,28 @@ def ai_test(request, provider_id):
         p = AIProvider.objects.get(pk=provider_id)
     except AIProvider.DoesNotExist:
         return JsonResponse({'error': 'Agent IA introuvable'}, status=404)
-    if not p.api_key:
-        return JsonResponse({'error': "Aucune clé API enregistrée pour cet agent."}, status=400)
 
-    from .ai_client import test_connection
-    ok, detail = test_connection(p)
-    if ok:
+    body = {}
+    if request.body:
+        try:
+            body = json.loads(request.body)
+        except ValueError:
+            body = {}
+
+    from .ai_client import verify
+    report = verify(p, message=(body.get('message') or '').strip() or None)
+
+    if report['ok']:
         from django.utils import timezone
         AIProvider.objects.filter(pk=p.pk).update(last_used_at=timezone.now())
-    return JsonResponse({'ok': ok, 'detail': detail}, status=200 if ok else 502)
+
+    # 200 même en cas d'échec : le rapport détaillé est l'information utile.
+    return JsonResponse({
+        'ok': report['ok'],
+        'checks': report['checks'],
+        'reply': report['reply'],
+        'agent': p.name,
+    })
 
 
 _CT_BY_EXT = {

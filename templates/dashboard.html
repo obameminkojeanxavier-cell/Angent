@@ -233,6 +233,28 @@ h2.sec,h3.sec{margin:14px 0 6px;font-size:14px;text-transform:uppercase;letter-s
       </div>
       <div class="field"><label>Description</label>
         <input type="text" id="ai-desc" placeholder="À quoi sert cet agent"></div>
+
+      <div class="field">
+        <label>Instructions principales (prompt système) —
+          <span class="small">rôle de l'agent, tâches autorisées, règles à respecter, manière d'interagir</span>
+        </label>
+        <textarea id="ai-prompt" style="min-height:220px;font-family:Consolas,monospace;font-size:12px"
+          placeholder="## Rôle&#10;...&#10;## Tâches autorisées&#10;...&#10;## Règles à respecter&#10;..."></textarea>
+        <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn ghost" onclick="fillPrompt()">Charger le modèle du rôle choisi</button>
+          <span class="small" id="ai-prompt-len">0 caractère</span>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:2fr 1fr 1fr;gap:10px">
+        <div class="field"><label>Question de contrôle <span class="small">(vérification)</span></label>
+          <input type="text" id="ai-test-msg" placeholder="Indique ton rôle en une phrase."></div>
+        <div class="field"><label>Température</label>
+          <input type="number" id="ai-temp" value="0.2" step="0.1" min="0" max="2"></div>
+        <div class="field"><label>Jetons max</label>
+          <input type="number" id="ai-maxtok" value="1024" min="16" max="8192"></div>
+      </div>
+
       <div class="field"><label>Périmètre d'action</label>
         <div class="scopes">
           <label><input type="checkbox" id="ai-p1" checked> Lire les données</label>
@@ -285,25 +307,38 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   if(t.dataset.v==='ai')loadAI();
 });
 
-/* ---- AGENTS IA (cle API des fournisseurs externes : DeepSeek, etc.) ---- */
-let AI_PRESETS={};
+/* ---- AGENTS IA (cle API + instructions principales) ---- */
+let AI_PRESETS={}, AI_ROLE_PROMPTS={}, AI_DEFAULT_TEST='';
 $('#ai-provider').addEventListener('change',()=>{
   const p=AI_PRESETS[$('#ai-provider').value];
   if(p){ if(p.base_url)$('#ai-url').value=p.base_url; if(p.model)$('#ai-model').value=p.model; }
 });
+$('#ai-prompt').addEventListener('input',()=>{
+  $('#ai-prompt-len').textContent=$('#ai-prompt').value.length+' caractères';
+});
+function fillPrompt(){
+  const tpl=AI_ROLE_PROMPTS[$('#ai-role').value];
+  if(!tpl)return toast('Aucun modèle pour ce rôle',false);
+  if($('#ai-prompt').value.trim() && !confirm('Remplacer les instructions actuelles par le modèle ?'))return;
+  $('#ai-prompt').value=tpl;
+  $('#ai-prompt-len').textContent=tpl.length+' caractères';
+  if(!$('#ai-test-msg').value)$('#ai-test-msg').value=AI_DEFAULT_TEST;
+  toast('Modèle chargé — adapte-le à ton besoin');
+}
 async function loadAI(){
   const d=await api('/manage/api/ai');
-  AI_PRESETS=d.presets||{};
+  AI_PRESETS=d.presets||{}; AI_ROLE_PROMPTS=d.role_prompts||{}; AI_DEFAULT_TEST=d.default_test_message||'';
   if(!$('#ai-url').value){const p=AI_PRESETS[$('#ai-provider').value]||{};$('#ai-url').value=p.base_url||'';$('#ai-model').value=p.model||'';}
   $('#ai-list').innerHTML=(d.providers||[]).map(p=>`
     <div class="agent"><div class="row">
       <div class="name">${esc(p.name)}
         <span class="badge ${p.is_active?'on':'off'}">${p.is_active?'actif':'inactif'}</span>
         <span class="badge cat" style="background:rgba(106,160,255,.14);color:var(--db)">${esc(p.provider)}</span>
-        ${p.has_key?'<span class="badge on">cle enregistree</span>':'<span class="badge off">sans cle</span>'}
+        ${p.has_key?'<span class="badge on">clé enregistrée</span>':'<span class="badge off">sans clé</span>'}
+        ${(p.system_prompt||'').trim()?'<span class="badge on">instructions définies</span>':'<span class="badge off">sans instructions</span>'}
       </div>
       <div>
-        <button class="btn ghost" onclick="testAI(${p.id},'${esc(p.name)}')">Tester la connexion</button>
+        <button class="btn" onclick="testAI(${p.id},'${esc(p.name)}')">Vérifier</button>
         <button class="btn ghost" onclick="editAI(${p.id})">Modifier</button>
         <button class="btn danger" onclick="delAI(${p.id},'${esc(p.name)}')">Supprimer</button>
       </div></div>
@@ -322,6 +357,8 @@ function editAI(id){
   const p=(window.__AI||[]).find(x=>x.id===id); if(!p)return;
   $('#ai-name').value=p.name; $('#ai-provider').value=p.provider; $('#ai-role').value=p.role;
   $('#ai-model').value=p.model; $('#ai-url').value=p.base_url; $('#ai-desc').value=p.description||'';
+  $('#ai-prompt').value=p.system_prompt||''; $('#ai-prompt-len').textContent=(p.system_prompt||'').length+' caractères';
+  $('#ai-test-msg').value=p.test_message||''; $('#ai-temp').value=p.temperature; $('#ai-maxtok').value=p.max_tokens;
   $('#ai-key').value='';   // on ne réaffiche jamais la clé
   $('#ai-p1').checked=p.permissions.can_read_data; $('#ai-p2').checked=p.permissions.can_read_audit;
   $('#ai-p3').checked=p.permissions.can_propose_changes; $('#ai-p4').checked=p.permissions.can_apply_changes;
@@ -333,6 +370,8 @@ async function saveAI(){
   const body={name,provider:$('#ai-provider').value,role:$('#ai-role').value,
     model:$('#ai-model').value.trim(),base_url:$('#ai-url').value.trim(),
     description:$('#ai-desc').value,api_key:$('#ai-key').value,
+    system_prompt:$('#ai-prompt').value,test_message:$('#ai-test-msg').value.trim(),
+    temperature:$('#ai-temp').value,max_tokens:$('#ai-maxtok').value,
     permissions:{can_read_data:$('#ai-p1').checked,can_read_audit:$('#ai-p2').checked,
       can_propose_changes:$('#ai-p3').checked,can_apply_changes:$('#ai-p4').checked}};
   try{await api('/manage/api/ai/save','POST',body);
@@ -340,10 +379,25 @@ async function saveAI(){
   }catch(e){toast(e.message,false)}
 }
 async function testAI(id,name){
-  const box=$('#ai-res-'+id); box.textContent='Test en cours…'; box.style.color='var(--muted)';
-  try{const d=await api('/manage/api/ai/'+id+'/test','POST',{});
-    box.textContent='✓ '+d.detail; box.style.color='var(--ok)'; toast('Connexion OK : '+name);
-  }catch(e){box.textContent='✕ '+e.message; box.style.color='var(--err)'; toast('Échec : '+e.message,false)}
+  const box=$('#ai-res-'+id);
+  box.innerHTML='<span class="small">Vérification en cours…</span>';
+  try{
+    const d=await api('/manage/api/ai/'+id+'/test','POST',{});
+    const lines=(d.checks||[]).map(c=>
+      `<div style="color:${c.ok?'var(--ok)':'var(--err)'}">${c.ok?'✓':'✕'} ${esc(c.name)}
+        <span class="small" style="color:var(--muted)">— ${esc(c.detail||'')}</span></div>`).join('');
+    const reply=(d.reply||'').trim();
+    box.innerHTML=
+      `<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">
+         <b style="color:${d.ok?'var(--ok)':'var(--err)'}">${d.ok?'Agent opérationnel':'Vérification échouée'}</b>
+         ${lines}
+         ${reply?'<div class="small" style="margin-top:8px">Réponse de l\'agent :</div><pre class="code">'+esc(reply)+'</pre>':''}
+       </div>`;
+    toast(d.ok?('Agent opérationnel : '+name):('Problème détecté sur '+name),d.ok);
+  }catch(e){
+    box.innerHTML='<div style="color:var(--err)">✕ '+esc(e.message)+'</div>';
+    toast('Échec : '+e.message,false);
+  }
 }
 async function delAI(id,name){
   if(!confirm('Supprimer l\'agent IA '+name+' ?'))return;

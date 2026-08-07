@@ -85,23 +85,106 @@ def test_connection(provider):
             [{'role': 'user', 'content': "Réponds uniquement par : OK"}],
             max_tokens=16,
         )
-    except urllib.error.HTTPError as e:
+    except Exception as e:
+        return False, _explain(e)
+
+    model = (raw or {}).get('model') or provider.model
+    return True, f'Connexion réussie (modèle {model}) — réponse : {(text or "").strip()[:80]}'
+
+
+def _explain(exc):
+    """Traduit une exception réseau/HTTP en message compréhensible."""
+    if isinstance(exc, urllib.error.HTTPError):
         body = ''
         try:
-            body = e.read().decode('utf-8', errors='replace')[:300]
+            body = exc.read().decode('utf-8', errors='replace')[:300]
         except Exception:
             pass
         hint = {
             401: "clé API invalide ou révoquée",
+            402: "crédit insuffisant sur le compte du fournisseur",
             403: "accès refusé (clé sans droit sur ce modèle)",
-            404: "URL ou modèle introuvable — vérifiez base_url et model",
+            404: "URL ou modèle introuvable — vérifiez l'URL de base et le modèle",
+            422: "requête refusée (paramètre invalide)",
             429: "quota ou limite de débit atteint",
-        }.get(e.code, '')
-        return False, f'HTTP {e.code} {hint} {body}'.strip()
-    except urllib.error.URLError as e:
-        return False, f"Serveur injoignable : {e.reason}"
-    except Exception as e:
-        return False, f'{type(e).__name__}: {e}'
+        }.get(exc.code, '')
+        return f'HTTP {exc.code} — {hint} {body}'.strip()
+    if isinstance(exc, urllib.error.URLError):
+        return f"serveur injoignable : {exc.reason}"
+    return f'{type(exc).__name__}: {exc}'
 
+
+def verify(provider, message=None):
+    """
+    Système de vérification d'un agent IA : enchaîne plusieurs contrôles et
+    renvoie un rapport détaillé (jamais d'exception).
+
+    Renvoie {'ok': bool, 'checks': [{'name', 'ok', 'detail'}], 'reply': str}
+    """
+    import time
+
+    checks = []
+    reply = ''
+
+    def add(name, ok, detail=''):
+        checks.append({'name': name, 'ok': bool(ok), 'detail': detail})
+        return ok
+
+    # 1. Configuration
+    missing = [f for f, v in (
+        ("URL de base", provider.base_url),
+        ("modèle", provider.model),
+    ) if not str(v or '').strip()]
+    add("Configuration complète", not missing,
+        f"champs manquants : {', '.join(missing)}" if missing
+        else f'{provider.provider} · {provider.model} · {provider.base_url}')
+
+    # 2. Clé API présente
+    add("Clé API renseignée", provider.has_key,
+        provider.key_masked or "aucune clé enregistrée")
+
+    # 3. Instructions principales
+    prompt = (provider.system_prompt or '').strip()
+    add("Instructions principales définies", bool(prompt),
+        f'{len(prompt)} caractères' if prompt
+        else "aucune instruction : l'agent n'aura pas de cadre de fonctionnement")
+
+    # 4. Agent actif
+    add("Agent actif", provider.is_active,
+        "actif" if provider.is_active else "désactivé : il ne sera pas utilisé")
+
+    if not provider.has_key or missing:
+        return {'ok': False, 'checks': checks, 'reply': reply}
+
+    # 5. Appel réel, avec les instructions configurées
+    messages = []
+    if prompt:
+        messages.append({'role': 'system', 'content': prompt})
+    messages.append({'role': 'user', 'content': message or provider.test_message
+                     or "Ceci est un test. Indique ton rôle en une phrase."})
+
+    started = time.monotonic()
+    try:
+        reply, raw = chat(provider, messages,
+                          max_tokens=min(provider.max_tokens or 256, 256),
+                          temperature=provider.temperature)
+    except Exception as e:
+        add("Authentification et appel du modèle", False, _explain(e))
+        return {'ok': False, 'checks': checks, 'reply': ''}
+
+    elapsed = int((time.monotonic() - started) * 1000)
     model = (raw or {}).get('model') or provider.model
-    return True, f'Connexion réussie (modèle {model}) — réponse : {(text or "").strip()[:80]}'
+    add("Authentification et appel du modèle", True, f'modèle {model} · {elapsed} ms')
+
+    # 6. Réponse exploitable
+    add("Réponse reçue", bool((reply or '').strip()),
+        f'{len(reply or "")} caractères'
+        if (reply or '').strip() else "réponse vide : vérifiez le modèle choisi")
+
+    usage = (raw or {}).get('usage') or {}
+    if usage:
+        add("Consommation de jetons", True,
+            f"entrée {usage.get('prompt_tokens', '?')} · "
+            f"sortie {usage.get('completion_tokens', '?')}")
+
+    return {'ok': all(c['ok'] for c in checks), 'checks': checks, 'reply': reply or ''}
