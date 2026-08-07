@@ -117,6 +117,72 @@ class SkillExecutor:
         
         return None
     
+    # Variantes de noms employées par les agents -> nom canonique attendu.
+    PARAM_ALIASES = {
+        'text': 'content', 'texte': 'content', 'contenu': 'content',
+        'corps': 'content', 'body': 'content', 'message': 'content',
+        'titre': 'title', 'objet': 'title', 'subject': 'title',
+        'sous_titre': 'subtitle', 'sous-titre': 'subtitle', 'soustitre': 'subtitle',
+        'entite': 'entity', 'entité': 'entity', 'societe': 'entity',
+        'société': 'entity', 'company': 'entity', 'organisation': 'entity',
+        'type': 'document_type', 'type_document': 'document_type',
+        'type_de_document': 'document_type', 'doc_type': 'document_type',
+        'documenttype': 'document_type',
+    }
+
+    # Clés par lesquelles un agent exprime le FORMAT DE SORTIE souhaité.
+    # Important : dans bfev_pipeline.py, `--format` désigne le format de la
+    # SOURCE (import_file). Passer « --format pdf » fait donc croire au pipeline
+    # que l'entrée est un PDF, d'où son rejet. On interprète ces clés ici au lieu
+    # de les transmettre aveuglément.
+    OUTPUT_FORMAT_KEYS = {
+        'output_format', 'output_type', 'target_format', 'export_format',
+        'export', 'to', 'format', 'sortie', 'format_sortie',
+    }
+    # Formats de sortie reconnus (le DOCX est la sortie par défaut du pipeline).
+    _PDF_VALUES = {'pdf', 'application/pdf', '.pdf'}
+    _DOCX_VALUES = {'docx', 'word', 'doc', '.docx',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
+
+    def _normalize_params(self, raw):
+        """
+        Harmonise les paramètres fournis par un agent :
+        - applique les alias de noms (titre -> title, contenu -> content…) ;
+        - traduit l'intention de format de sortie en flag `pdf` ;
+        - conserve un éventuel format de SOURCE légitime (markdown, html…).
+        """
+        params = {}
+        want_pdf = False
+        source_format = None
+
+        for key, value in (raw or {}).items():
+            k = str(key).strip()
+            low = k.lower()
+
+            if low in self.OUTPUT_FORMAT_KEYS:
+                val = str(value).strip().lower()
+                if val in self._PDF_VALUES:
+                    want_pdf = True
+                elif val in self._DOCX_VALUES or val == '':
+                    pass  # sortie DOCX = comportement par défaut
+                elif low == 'format':
+                    # Valeur non reconnue comme format de sortie : c'est le
+                    # format de la source (markdown, html, txt…).
+                    source_format = val
+                continue
+
+            if low == 'pdf':
+                want_pdf = want_pdf or bool(value) and str(value).lower() not in ('false', '0', 'no')
+                continue
+
+            params[self.PARAM_ALIASES.get(low, k)] = value
+
+        if source_format:
+            params['format'] = source_format
+        if want_pdf:
+            params['pdf'] = True
+        return params
+
     def _execute_python(self, entry_point):
         """Exécute un script Python du skill, avec TOUTES ses ressources."""
         import logging
@@ -167,12 +233,16 @@ class SkillExecutor:
                 'catalog': 'catalog',
                 'entity_catalog': 'entity-catalog',
             }
-            
+
             # Paramètres booléens qui n'ont pas de valeur (selon bfev_pipeline.py)
             boolean_params = {'pdf', 'analyze_only', 'no_cache'}
-            
+
+            # Les agents (ChatGPT, Claude…) nomment les champs librement : on
+            # normalise les variantes courantes vers les noms attendus.
+            params = self._normalize_params(self.params)
+
             # Générer automatiquement un chemin de sortie si non fourni.
-            output_path = self.params.get('output')
+            output_path = params.get('output')
             if not output_path:
                 # Le dossier de sortie vit DANS le répertoire temporaire de cette
                 # exécution : il est créé par le processus courant (donc pas de
@@ -183,7 +253,7 @@ class SkillExecutor:
                 output_dir.mkdir(parents=True, exist_ok=True)
 
                 # Générer un nom de fichier sécurisé
-                document_type = self.params.get('document_type', 'document').replace('_', '-')
+                document_type = str(params.get('document_type') or 'document').replace('_', '-')
                 document_type = re.sub(r'[^A-Za-z0-9._-]', '-', document_type) or 'document'
                 output_filename = f"{document_type}.docx"
                 output_path = str(output_dir / output_filename)
@@ -217,24 +287,22 @@ class SkillExecutor:
             args.append(output_path)
             
             # Ajouter les paramètres comme arguments
-            for key, value in self.params.items():
-                # Mapping des noms de paramètres
-                cli_key = param_mapping.get(key, key)
-                
-                # Gestion des formats de sortie (convertir en flag --pdf)
-                if key == 'output_format' and value == 'pdf':
-                    args.append('--pdf')
-                # Gestion des paramètres booléens
-                elif key in boolean_params or (isinstance(value, bool) and value):
-                    args.append(f'--{cli_key}')
-                # Gestion des paramètres avec valeur (sauf output déjà ajouté)
-                elif key != 'output' and value is not None and value != '':
+            for key, value in params.items():
+                if key == 'output':
+                    continue  # déjà passé ci-dessus
+                cli_key = param_mapping.get(key, key).replace('_', '-')
+
+                if key in boolean_params or isinstance(value, bool):
+                    # Un flag ne s'ajoute que s'il est demandé.
+                    if value:
+                        args.append(f'--{cli_key}')
+                elif value is not None and value != '':
                     args.append(f'--{cli_key}')
                     args.append(str(value))
-            
+
             # Préparer les variables d'environnement
             env = os.environ.copy()
-            for key, value in self.params.items():
+            for key, value in params.items():
                 env[f'SKILL_{key.upper()}'] = str(value)
 
             # LibreOffice (conversion DOCX -> PDF) exige un HOME inscriptible pour
