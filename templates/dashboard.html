@@ -205,10 +205,14 @@ h2.sec,h3.sec{margin:14px 0 6px;font-size:14px;text-transform:uppercase;letter-s
   <div class="view" id="v-ai">
     <h2 class="sec">Ajouter / modifier un agent IA</h2>
     <div class="agent">
+      <div class="small" style="margin-bottom:14px">
+        Renseigne les <b>5 champs</b> ci-dessous, clique <b>Enregistrer</b>, puis <b>Vérifier</b>
+        pour contrôler que l'agent fonctionne. Le reste est rempli automatiquement.
+      </div>
       <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
-        <div class="field"><label>Nom (identifiant interne)</label>
+        <div class="field"><label>1. Nom de l'agent</label>
           <input type="text" id="ai-name" placeholder="ex: deepseek-systeme"></div>
-        <div class="field"><label>Fournisseur</label>
+        <div class="field"><label>2. Fournisseur</label>
           <select id="ai-provider">
             <option value="deepseek">DeepSeek</option>
             <option value="openai">OpenAI</option>
@@ -217,52 +221,59 @@ h2.sec,h3.sec{margin:14px 0 6px;font-size:14px;text-transform:uppercase;letter-s
             <option value="ollama">Ollama (local)</option>
             <option value="other">Autre</option>
           </select></div>
-        <div class="field"><label>Rôle</label>
+        <div class="field"><label>3. Rôle</label>
           <select id="ai-role">
             <option value="system">Agent système (analyse / optimisation)</option>
             <option value="assistant">Assistant (rédaction, résumés)</option>
             <option value="reviewer">Relecteur (qualité, conformité)</option>
             <option value="other">Autre</option>
           </select></div>
-        <div class="field"><label>Modèle</label>
-          <input type="text" id="ai-model" placeholder="deepseek-chat"></div>
-        <div class="field"><label>URL de base de l'API</label>
-          <input type="text" id="ai-url" placeholder="https://api.deepseek.com"></div>
-        <div class="field"><label>Clé API <span class="small">(laisser vide pour conserver l'actuelle)</span></label>
+        <div class="field"><label>4. Clé API 🔑 <span class="small">(vide = on garde l'actuelle)</span></label>
           <input type="password" id="ai-key" placeholder="sk-..." autocomplete="new-password"></div>
       </div>
-      <div class="field"><label>Description</label>
-        <input type="text" id="ai-desc" placeholder="À quoi sert cet agent"></div>
 
       <div class="field">
-        <label>Instructions principales (prompt système) —
-          <span class="small">rôle de l'agent, tâches autorisées, règles à respecter, manière d'interagir</span>
+        <label>5. Instructions de l'agent
+          <span class="small">— son rôle, ce qu'il peut faire, les règles à respecter</span>
         </label>
-        <textarea id="ai-prompt" style="min-height:220px;font-family:Consolas,monospace;font-size:12px"
-          placeholder="## Rôle&#10;...&#10;## Tâches autorisées&#10;...&#10;## Règles à respecter&#10;..."></textarea>
+        <textarea id="ai-prompt" style="min-height:160px;font-family:Consolas,monospace;font-size:12px"
+          placeholder="Clique sur « Remplir automatiquement » pour partir d'un modèle prêt à l'emploi."></textarea>
         <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <button class="btn ghost" onclick="fillPrompt()">Charger le modèle du rôle choisi</button>
+          <button class="btn ghost" onclick="fillPrompt()">✨ Remplir automatiquement</button>
           <span class="small" id="ai-prompt-len">0 caractère</span>
         </div>
       </div>
 
-      <div class="grid" style="grid-template-columns:2fr 1fr 1fr;gap:10px">
-        <div class="field"><label>Question de contrôle <span class="small">(vérification)</span></label>
-          <input type="text" id="ai-test-msg" placeholder="Indique ton rôle en une phrase."></div>
-        <div class="field"><label>Température</label>
-          <input type="number" id="ai-temp" value="0.2" step="0.1" min="0" max="2"></div>
-        <div class="field"><label>Jetons max</label>
-          <input type="number" id="ai-maxtok" value="1024" min="16" max="8192"></div>
-      </div>
-
-      <div class="field"><label>Périmètre d'action</label>
-        <div class="scopes">
-          <label><input type="checkbox" id="ai-p1" checked> Lire les données</label>
-          <label><input type="checkbox" id="ai-p2" checked> Lire le journal d'audit</label>
-          <label><input type="checkbox" id="ai-p3" checked> Proposer des améliorations</label>
-          <label><input type="checkbox" id="ai-p4"> Appliquer les changements (déconseillé)</label>
+      <details style="margin:6px 0 12px">
+        <summary class="small" style="cursor:pointer;padding:8px 0">⚙️ Réglages avancés (optionnel — remplis automatiquement)</summary>
+        <div style="padding-top:10px">
+          <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px">
+            <div class="field"><label>Modèle</label>
+              <input type="text" id="ai-model" placeholder="deepseek-chat"></div>
+            <div class="field"><label>URL de base de l'API</label>
+              <input type="text" id="ai-url" placeholder="https://api.deepseek.com"></div>
+          </div>
+          <div class="field"><label>Description</label>
+            <input type="text" id="ai-desc" placeholder="À quoi sert cet agent"></div>
+          <div class="grid" style="grid-template-columns:2fr 1fr 1fr;gap:10px">
+            <div class="field"><label>Question de contrôle <span class="small">(vérification)</span></label>
+              <input type="text" id="ai-test-msg" placeholder="Indique ton rôle en une phrase."></div>
+            <div class="field"><label>Température</label>
+              <input type="number" id="ai-temp" value="0.2" step="0.1" min="0" max="2"></div>
+            <div class="field"><label>Jetons max</label>
+              <input type="number" id="ai-maxtok" value="1024" min="16" max="8192"></div>
+          </div>
+          <div class="field"><label>Périmètre d'action</label>
+            <div class="scopes">
+              <label><input type="checkbox" id="ai-p1" checked> Lire les données</label>
+              <label><input type="checkbox" id="ai-p2" checked> Lire le journal d'audit</label>
+              <label><input type="checkbox" id="ai-p3" checked> Proposer des améliorations</label>
+              <label><input type="checkbox" id="ai-p4"> Appliquer les changements (déconseillé)</label>
+            </div>
+          </div>
         </div>
-      </div>
+      </details>
+
       <button class="btn" onclick="saveAI()">Enregistrer l'agent IA</button>
     </div>
 
